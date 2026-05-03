@@ -13,18 +13,26 @@ from app.utils.timeframe import parse
 router = APIRouter(prefix="/top", tags=["top"])
 
 
-async def _topk_with_counts(state_col: str, count_col: str | None, timeframe: str, limit: int) -> list[TopItem]:
-    """Return top items with their actual counts from raw events.
+# (rollup_state_column, raw_event_column)
+_KIND = {
+    "destinations": ("top_destinations", "destination_ip"),
+    "domains":      ("top_domains",      "destination_hostname"),
+    "applications": ("top_apps",         "application"),
+    "categories":   ("top_categories",   "application_category"),
+    "clients":      ("top_clients",      "source_ip"),
+    "countries":    ("top_countries",    "destination_country"),
+}
 
-    topKState only stores the labels (no counts), so we use the topK output to
-    pick the candidate set and then count occurrences over the same window in
-    raw_flow_events. Bounded to 20 candidates × `limit` for the count step,
-    which stays cheap because we only filter raw events that are in that set.
-    """
+
+async def _topk_with_counts(kind: str, timeframe: str, limit: int) -> list[TopItem]:
+    """Pick candidate labels via topKMerge over the rollup, then count
+    occurrences in raw_flow_events. The rollup's topKState column has a
+    different name than the raw column it tracks, so we pass both."""
+    rollup_col, raw_col = _KIND[kind]
     tf = parse(timeframe)
     candidates_row = await ch.query_one(
         f"""
-        SELECT topKMerge(20)({state_col}) AS k
+        SELECT topKMerge(20)({rollup_col}) AS k
         FROM threatflow.{tf.rollup_table}
         WHERE window_start >= {{since:DateTime64(3,'UTC')}}
           AND window_start <  {{until:DateTime64(3,'UTC')}}
@@ -34,14 +42,13 @@ async def _topk_with_counts(state_col: str, count_col: str | None, timeframe: st
     candidates = list((candidates_row or {}).get("k") or [])
     if not candidates:
         return []
-    # Count actual occurrences in raw events (still filtered so it's quick).
     rows = await ch.query(
         f"""
-        SELECT {state_col} AS label, count() AS c
+        SELECT {raw_col} AS label, count() AS c
         FROM threatflow.raw_flow_events
         WHERE event_time >= {{since:DateTime64(3,'UTC')}}
           AND event_time <  {{until:DateTime64(3,'UTC')}}
-          AND {state_col} IN ({{candidates:Array(String)}})
+          AND {raw_col} IN ({{candidates:Array(String)}})
         GROUP BY label
         ORDER BY c DESC
         LIMIT {{limit:UInt32}}
@@ -53,35 +60,29 @@ async def _topk_with_counts(state_col: str, count_col: str | None, timeframe: st
 
 @router.get("/destinations", response_model=TopResponse)
 async def top_destinations(timeframe: str = Query(default="24h"), limit: int = Query(default=20, ge=1, le=100), _user: User = Depends(get_current_user)):
-    items = await _topk_with_counts("destination_ip", None, timeframe, limit)
-    return TopResponse(timeframe=parse(timeframe).timeframe, items=items)
+    return TopResponse(timeframe=parse(timeframe).timeframe, items=await _topk_with_counts("destinations", timeframe, limit))
 
 
 @router.get("/domains", response_model=TopResponse)
 async def top_domains(timeframe: str = Query(default="24h"), limit: int = Query(default=20, ge=1, le=100), _user: User = Depends(get_current_user)):
-    items = await _topk_with_counts("destination_hostname", None, timeframe, limit)
-    return TopResponse(timeframe=parse(timeframe).timeframe, items=items)
+    return TopResponse(timeframe=parse(timeframe).timeframe, items=await _topk_with_counts("domains", timeframe, limit))
 
 
 @router.get("/applications", response_model=TopResponse)
 async def top_applications(timeframe: str = Query(default="24h"), limit: int = Query(default=20, ge=1, le=100), _user: User = Depends(get_current_user)):
-    items = await _topk_with_counts("application", None, timeframe, limit)
-    return TopResponse(timeframe=parse(timeframe).timeframe, items=items)
+    return TopResponse(timeframe=parse(timeframe).timeframe, items=await _topk_with_counts("applications", timeframe, limit))
 
 
 @router.get("/categories", response_model=TopResponse)
 async def top_categories(timeframe: str = Query(default="24h"), limit: int = Query(default=20, ge=1, le=100), _user: User = Depends(get_current_user)):
-    items = await _topk_with_counts("application_category", None, timeframe, limit)
-    return TopResponse(timeframe=parse(timeframe).timeframe, items=items)
+    return TopResponse(timeframe=parse(timeframe).timeframe, items=await _topk_with_counts("categories", timeframe, limit))
 
 
 @router.get("/clients", response_model=TopResponse)
 async def top_clients(timeframe: str = Query(default="24h"), limit: int = Query(default=20, ge=1, le=100), _user: User = Depends(get_current_user)):
-    items = await _topk_with_counts("source_ip", None, timeframe, limit)
-    return TopResponse(timeframe=parse(timeframe).timeframe, items=items)
+    return TopResponse(timeframe=parse(timeframe).timeframe, items=await _topk_with_counts("clients", timeframe, limit))
 
 
 @router.get("/countries", response_model=TopResponse)
 async def top_countries(timeframe: str = Query(default="24h"), limit: int = Query(default=20, ge=1, le=100), _user: User = Depends(get_current_user)):
-    items = await _topk_with_counts("destination_country", None, timeframe, limit)
-    return TopResponse(timeframe=parse(timeframe).timeframe, items=items)
+    return TopResponse(timeframe=parse(timeframe).timeframe, items=await _topk_with_counts("countries", timeframe, limit))
