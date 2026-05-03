@@ -129,7 +129,14 @@ async def storage_health(_user: User = Depends(get_current_user)) -> StorageHeal
 
 # ---- Retention -------------------------------------------------------------
 
-_TTL_RE = re.compile(r"INTERVAL\s+(\d+)\s+DAY", re.IGNORECASE)
+_TTL_RE = re.compile(r"toIntervalDay\((\d+)\)|INTERVAL\s+(\d+)\s+DAY", re.IGNORECASE)
+
+
+def _ttl_days_from_ddl(ddl: str) -> int:
+    m = _TTL_RE.search(ddl or "")
+    if not m:
+        return 0
+    return int(m.group(1) or m.group(2) or 0)
 
 
 async def _current_ttls() -> list[RetentionPolicy]:
@@ -142,10 +149,7 @@ async def _current_ttls() -> list[RetentionPolicy]:
     items: list[RetentionPolicy] = []
     by_name = {r["name"]: r["create_table_query"] for r in rows}
     for tbl in TRACKED_TABLES:
-        ddl = by_name.get(tbl, "") or ""
-        m = _TTL_RE.search(ddl)
-        days = int(m.group(1)) if m else 0
-        items.append(RetentionPolicy(table=tbl, ttl_days=days))
+        items.append(RetentionPolicy(table=tbl, ttl_days=_ttl_days_from_ddl(by_name.get(tbl, ""))))
     return items
 
 
