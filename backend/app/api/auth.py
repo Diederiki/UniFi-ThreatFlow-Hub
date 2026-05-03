@@ -1,9 +1,16 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+def _revoke_now() -> datetime:
+    """Stamp 1s in the future so any token with iat <= current-second
+    (whole-second resolution) is rejected; new tokens issued strictly later
+    pass the check."""
+    return datetime.now(timezone.utc) + timedelta(seconds=1)
 
 from app.auth.dependencies import SESSION_COOKIE, get_current_user
 from app.auth.jwt_tokens import create_access_token
@@ -82,7 +89,7 @@ async def change_password(
     if not verify_password(payload.current_password, user.password_hash):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="current_password_incorrect")
     user.password_hash = hash_password(payload.new_password)
-    user.min_token_iat = datetime.now(timezone.utc)  # invalidate every other session
+    user.min_token_iat = _revoke_now()  # invalidate every other session
     await db.commit()
     await log_action(db, actor=user, action="auth.change_password", entity_type="user",
                      entity_id=str(user.id))
@@ -97,7 +104,7 @@ async def sign_out_everywhere(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Bumps min_token_iat so every existing JWT for this user is rejected."""
-    user.min_token_iat = datetime.now(timezone.utc)
+    user.min_token_iat = _revoke_now()
     await db.commit()
     await log_action(db, actor=user, action="auth.sign_out_everywhere", entity_type="user",
                      entity_id=str(user.id))
