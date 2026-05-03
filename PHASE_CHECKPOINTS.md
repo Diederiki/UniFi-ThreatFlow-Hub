@@ -56,12 +56,16 @@ ClickHouse / Postgres / Redis stay inside the docker network only (`threatflow_n
 - [x] ClickHouse `init/00-create-db.sql` creates `threatflow` database
 - [x] Next.js dark-themed login page POSTs to `/api/auth/login`, lands on `/overview` placeholder; full sidebar with all 12 blueprint pages
 - [x] `scripts/create-admin.sh` auto-generates admin password and prints once
-- [ ] **Runtime acceptance** — pending first deploy to `51.195.82.50`:
-  - [ ] `docker compose up -d --build` succeeds
-  - [ ] `scripts/run-migrations.sh` succeeds
-  - [ ] `scripts/create-admin.sh` prints credentials
-  - [ ] `scripts/healthcheck.sh` returns 0 (6 OK / 0 FAIL)
-  - [ ] Browser can sign in at the eventual https://threatflow.amspec.group
+- [x] **Runtime acceptance — LIVE on `51.195.82.50` as of 2026-05-03**:
+  - [x] `docker compose -f docker-compose.yml up -d --build` succeeds (6/6 containers healthy)
+  - [x] `scripts/run-migrations.sh` succeeds (`20260503_0001` applied)
+  - [x] `scripts/create-admin.sh` prints credentials (admin user inserted)
+  - [x] `scripts/healthcheck.sh` returns 0 (11 OK / 0 FAIL after `source .env` fix in 585faf8)
+  - [x] Login → JWT cookie → `/api/auth/me` round-trip works through nginx
+  - [x] Bad password → 401
+  - [x] Collector heartbeats every 30s (mock=True)
+  - [x] Existing 5 production sites on the VPS unaffected by the new nginx server block
+  - [ ] Browser sign-in at https://threatflow.amspec.group — **blocked on Cloudflare DNS A record + `certbot --nginx`** (handed off to user)
 
 ### Phase 2
 - [ ] Alembic migrations for all blueprint tables: `users`, `roles`, `branches`, `branch_credentials`, `collector_status`, `collector_runs`, `app_settings`, `audit_logs`
