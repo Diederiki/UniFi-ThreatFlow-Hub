@@ -23,11 +23,27 @@ router = APIRouter(prefix="/branches", tags=["branches"])
 
 @router.get("", response_model=BranchListOut)
 async def list_branches(
+    search: str | None = None,
+    country: str | None = None,
+    enabled: bool | None = None,
+    tag: str | None = None,
+    status: str | None = None,
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
     rows = await svc.list_branches(db)
     items = [svc.to_out(r) for r in rows]
+    if search:
+        s = search.lower()
+        items = [b for b in items if s in (b.name or "").lower() or s in (b.branch_code or "").lower()]
+    if country:
+        items = [b for b in items if (b.country or "").lower() == country.lower()]
+    if enabled is not None:
+        items = [b for b in items if b.enabled == enabled]
+    if tag:
+        items = [b for b in items if tag in (b.tags or [])]
+    if status:
+        items = [b for b in items if (b.status and b.status.status == status)]
     return BranchListOut(items=items, total=len(items))
 
 

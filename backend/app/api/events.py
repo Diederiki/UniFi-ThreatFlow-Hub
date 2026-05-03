@@ -49,6 +49,10 @@ async def list_threats(
     signature: str | None = Query(default=None),
     source_ip: str | None = Query(default=None),
     destination_ip: str | None = Query(default=None),
+    destination_hostname: str | None = Query(default=None),
+    country: str | None = Query(default=None),
+    risk: str | None = Query(default=None),
+    threat_category: str | None = Query(default=None),
     action: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=500),
@@ -67,6 +71,14 @@ async def list_threats(
         where.append("source_ip = {sip:String}"); params["sip"] = source_ip
     if destination_ip:
         where.append("destination_ip = {dip:String}"); params["dip"] = destination_ip
+    if destination_hostname:
+        where.append("positionCaseInsensitive(destination_hostname, {dh:String}) > 0"); params["dh"] = destination_hostname
+    if country:
+        where.append("destination_country = {co:String}"); params["co"] = country
+    if risk:
+        where.append("risk = {rk:String}"); params["rk"] = risk
+    if threat_category:
+        where.append("threat_category = {tc:String}"); params["tc"] = threat_category
     if action:
         where.append("action = {act:String}"); params["act"] = action
 
@@ -182,6 +194,14 @@ async def get_threat(event_id: str, _user: User = Depends(get_current_user)):
 async def list_blocked(
     timeframe: str = Query(default="24h"),
     branch_id: UUID | None = Query(default=None),
+    source_ip: str | None = Query(default=None),
+    destination_ip: str | None = Query(default=None),
+    destination_hostname: str | None = Query(default=None, description="case-insensitive contains"),
+    country: str | None = Query(default=None),
+    application: str | None = Query(default=None),
+    application_category: str | None = Query(default=None),
+    policy_name: str | None = Query(default=None, description="case-insensitive contains"),
+    risk: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=500),
     _user: User = Depends(get_current_user),
@@ -195,6 +215,17 @@ async def list_blocked(
     params: dict[str, Any] = {"since": tf.since, "until": tf.until}
     if branch_id:
         where.append("branch_id = {bid:UUID}"); params["bid"] = branch_id
+    if source_ip:           where.append("source_ip = {sip:String}"); params["sip"] = source_ip
+    if destination_ip:      where.append("destination_ip = {dip:String}"); params["dip"] = destination_ip
+    if destination_hostname:
+        where.append("positionCaseInsensitive(destination_hostname, {dh:String}) > 0"); params["dh"] = destination_hostname
+    if country:             where.append("destination_country = {co:String}"); params["co"] = country
+    if application:         where.append("application = {app:String}"); params["app"] = application
+    if application_category:where.append("application_category = {cat:String}"); params["cat"] = application_category
+    if policy_name:
+        where.append("positionCaseInsensitive(policy_name, {pn:String}) > 0"); params["pn"] = policy_name
+    if risk:                where.append("risk = {rk:String}"); params["rk"] = risk
+
     offset = (page - 1) * page_size
     params["limit"] = page_size
     params["offset"] = offset

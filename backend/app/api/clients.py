@@ -17,6 +17,9 @@ router = APIRouter(prefix="/clients", tags=["clients"])
 async def list_clients(
     timeframe: str = Query(default="24h"),
     search: str = Query(default=""),
+    branch_id: str | None = Query(default=None),
+    min_threats: int = Query(default=0, ge=0),
+    min_blocked: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
     _user: User = Depends(get_current_user),
 ):
@@ -25,10 +28,18 @@ async def list_clients(
         "event_time >= {since:DateTime64(3,'UTC')}",
         "event_time < {until:DateTime64(3,'UTC')}",
     ]
-    params = {"since": tf.since, "until": tf.until, "limit": limit}
+    params: dict = {"since": tf.since, "until": tf.until, "limit": limit}
     if search:
         where.append("(positionCaseInsensitive(source_ip, {q:String}) > 0 OR positionCaseInsensitive(source_hostname, {q:String}) > 0)")
         params["q"] = search
+    if branch_id:
+        where.append("branch_id = {bid:UUID}"); params["bid"] = branch_id
+    having = []
+    if min_threats > 0:
+        having.append("countIf(policy_type IN ('ids','ips','ids_ips')) >= {mt:UInt32}"); params["mt"] = min_threats
+    if min_blocked > 0:
+        having.append("countIf(action = 'block') >= {mb:UInt32}"); params["mb"] = min_blocked
+    having_clause = (" HAVING " + " AND ".join(having)) if having else ""
     sql = f"""
         SELECT
             source_ip                                   AS client_ip,
@@ -41,6 +52,7 @@ async def list_clients(
         FROM threatflow.raw_flow_events
         WHERE {" AND ".join(where)}
         GROUP BY source_ip
+        {having_clause}
         ORDER BY flows DESC
         LIMIT {{limit:UInt32}}
     """

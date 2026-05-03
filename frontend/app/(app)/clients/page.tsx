@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { clientsApi, type ClientList } from "@/lib/dashboard";
 import { useTimeframe } from "@/lib/timeframe";
+import { AdvancedFilters, type FilterValues } from "@/components/AdvancedFilters";
+import { CLIENT_FILTERS } from "@/lib/filterDefs";
+import { api } from "@/lib/api";
+import type { ClientList } from "@/lib/dashboard";
 
 function fmtBytes(n: number): string {
   if (!n) return "0";
@@ -15,25 +18,26 @@ function fmtBytes(n: number): string {
 export default function ClientsPage() {
   const { timeframe } = useTimeframe();
   const [data, setData] = useState<ClientList | null>(null);
-  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<FilterValues>({});
 
   useEffect(() => {
     let cancelled = false;
     const id = setTimeout(() => {
-      clientsApi.list(timeframe, search, 100).then((d) => { if (!cancelled) setData(d); });
+      const params = new URLSearchParams({ timeframe, limit: "100" });
+      for (const [k, v] of Object.entries(filters)) if (v !== undefined && v !== "" && v !== 0) params.set(k, String(v));
+      api<ClientList>(`/clients?${params.toString()}`).then((d) => { if (!cancelled) setData(d); });
     }, 200);
     return () => { cancelled = true; clearTimeout(id); };
-  }, [timeframe, search]);
+  }, [timeframe, JSON.stringify(filters)]);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-baseline justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold">Clients</h1>
-          <p className="text-xs text-muted">{data?.items.length ?? "—"} clients seen in last {timeframe}</p>
-        </div>
-        <input className="input max-w-xs" placeholder="search ip / hostname" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div>
+        <h1 className="text-lg font-semibold">Clients</h1>
+        <p className="text-xs text-muted">{data?.items.length ?? "—"} clients seen in last {timeframe}</p>
       </div>
+
+      <AdvancedFilters defs={CLIENT_FILTERS} value={filters} onChange={setFilters} storageKey="threatflow.filters.clients" />
 
       <div className="panel overflow-x-auto">
         <table className="w-full text-sm">

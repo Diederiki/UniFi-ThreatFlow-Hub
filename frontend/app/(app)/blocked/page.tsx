@@ -7,6 +7,8 @@ import { TopList } from "@/components/TopList";
 import { TrendArea } from "@/components/charts/TrendArea";
 import { useTimeframe } from "@/lib/timeframe";
 import type { Timeframe } from "@/lib/timeframe";
+import { AdvancedFilters, type FilterValues } from "@/components/AdvancedFilters";
+import { BLOCKED_FILTERS } from "@/lib/filterDefs";
 
 const blockedApi = {
   topDestinations: (tf: Timeframe, limit = 10) => api<Top>(`/blocked/top-destinations?timeframe=${tf}&limit=${limit}`),
@@ -19,6 +21,7 @@ const blockedApi = {
 export default function BlockedPage() {
   const { timeframe } = useTimeframe();
   const [page, setPage] = useState(1);
+  const [filters, setFilters] = useState<FilterValues>({});
   const [data, setData] = useState<EventsPage<FlowEvent> | null>(null);
   const [topDst, setTopDst] = useState<Top | null>(null);
   const [topClt, setTopClt] = useState<Top | null>(null);
@@ -28,8 +31,10 @@ export default function BlockedPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const apiArgs: Record<string, string> = {};
+    for (const [k, v] of Object.entries(filters)) if (v !== undefined && v !== "") apiArgs[k] = String(v);
     Promise.all([
-      eventsApi.blocked(timeframe, { page, page_size: 50 }),
+      eventsApi.blocked(timeframe, { ...apiArgs, page, page_size: 50 }),
       blockedApi.topDestinations(timeframe),
       blockedApi.topClients(timeframe),
       blockedApi.topPolicies(timeframe),
@@ -40,7 +45,9 @@ export default function BlockedPage() {
       setData(d); setTopDst(dst); setTopClt(clt); setTopPol(pol); setTopCo(co); setTrend(tr);
     });
     return () => { cancelled = true; };
-  }, [timeframe, page]);
+  }, [timeframe, page, JSON.stringify(filters)]);
+
+  useEffect(() => { setPage(1); }, [JSON.stringify(filters)]);
 
   return (
     <div className="space-y-4">
@@ -48,6 +55,8 @@ export default function BlockedPage() {
         <h1 className="text-lg font-semibold">Blocked Traffic</h1>
         <p className="text-xs text-muted">~{data?.total_estimate.toLocaleString() ?? "—"} blocked sessions in last {timeframe} · page {page}</p>
       </div>
+
+      <AdvancedFilters defs={BLOCKED_FILTERS} value={filters} onChange={setFilters} storageKey="threatflow.filters.blocked" />
 
       <div className="panel p-4">
         <div className="flex items-baseline justify-between mb-2">

@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { branchesApi, type Branch } from "@/lib/branches";
 import { useToast } from "@/components/Toast";
-import { ApiError } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { AdvancedFilters, type FilterValues } from "@/components/AdvancedFilters";
+import { BRANCH_FILTERS } from "@/lib/filterDefs";
 
 function statusBadge(b: Branch): { label: string; cls: string } {
   if (!b.enabled) return { label: "disabled", cls: "bg-panel2 text-muted border-border" };
@@ -18,11 +20,15 @@ function statusBadge(b: Branch): { label: string; cls: string } {
 export default function BranchesPage() {
   const toast = useToast();
   const [items, setItems] = useState<Branch[] | null>(null);
+  const [filters, setFilters] = useState<FilterValues>({});
   const [error, setError] = useState<string | null>(null);
 
   async function reload() {
     try {
-      const r = await branchesApi.list();
+      const params = new URLSearchParams();
+      for (const [k, v] of Object.entries(filters)) if (v !== undefined && v !== "") params.set(k, String(v));
+      const qs = params.toString();
+      const r = await api<{ items: Branch[]; total: number }>(`/branches${qs ? `?${qs}` : ""}`);
       setItems(r.items);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to load branches";
@@ -30,7 +36,7 @@ export default function BranchesPage() {
     }
   }
 
-  useEffect(() => { reload(); }, []);
+  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [JSON.stringify(filters)]);
 
   async function onToggle(b: Branch) {
     try {
@@ -73,6 +79,8 @@ export default function BranchesPage() {
         </div>
         <Link href="/branches/new" className="btn btn-primary">+ Add branch</Link>
       </div>
+
+      <AdvancedFilters defs={BRANCH_FILTERS} value={filters} onChange={setFilters} storageKey="threatflow.filters.branches" />
 
       {error && (
         <div className="panel p-4 text-sm text-danger border-danger/30">{error}</div>

@@ -4,9 +4,8 @@ import { useEffect, useState } from "react";
 import { eventsApi, type EventsPage, type ThreatEvent } from "@/lib/dashboard";
 import { useTimeframe } from "@/lib/timeframe";
 import { useToast } from "@/components/Toast";
-
-const SEVERITIES = ["", "low", "medium", "high", "critical"];
-const ACTIONS = ["", "allow", "block"];
+import { AdvancedFilters, type FilterValues } from "@/components/AdvancedFilters";
+import { THREAT_FILTERS } from "@/lib/filterDefs";
 
 function severityCls(s: string): string {
   if (s === "critical" || s === "high") return "bg-danger/15 text-danger border-danger/30";
@@ -19,13 +18,15 @@ export default function ThreatsPage() {
   const toast = useToast();
   const [data, setData] = useState<EventsPage<ThreatEvent> | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ severity: "", signature: "", source_ip: "", destination_ip: "", action: "" });
+  const [filters, setFilters] = useState<FilterValues>({});
   const [page, setPage] = useState(1);
 
   async function reload() {
     setLoading(true);
     try {
-      const r = await eventsApi.threats(timeframe, { ...filters, page, page_size: 50 });
+      const apiArgs: Record<string, string> = {};
+      for (const [k, v] of Object.entries(filters)) if (v !== undefined && v !== "") apiArgs[k] = String(v);
+      const r = await eventsApi.threats(timeframe, { ...apiArgs, page, page_size: 50 });
       setData(r);
     } catch (e) {
       toast.push(e instanceof Error ? e.message : "Load failed", "danger");
@@ -34,11 +35,13 @@ export default function ThreatsPage() {
     }
   }
 
-  useEffect(() => { reload(); }, [timeframe, page, JSON.stringify(filters)]);
+  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [timeframe, page, JSON.stringify(filters)]);
+  useEffect(() => { setPage(1); }, [JSON.stringify(filters)]);
 
   function csvUrl(): string {
-    const p = new URLSearchParams({ timeframe, ...Object.fromEntries(Object.entries(filters).filter(([,v]) => v)) });
-    return `/api/threats.csv?${p.toString()}`;
+    const params = new URLSearchParams({ timeframe });
+    for (const [k, v] of Object.entries(filters)) if (v !== undefined && v !== "") params.set(k, String(v));
+    return `/api/threats.csv?${params.toString()}`;
   }
 
   return (
@@ -51,17 +54,7 @@ export default function ThreatsPage() {
         <a href={csvUrl()} className="btn text-xs">Export CSV</a>
       </div>
 
-      <div className="panel p-3 grid grid-cols-2 sm:grid-cols-5 gap-2 text-sm">
-        <select className="input" value={filters.severity} onChange={(e) => { setFilters({ ...filters, severity: e.target.value }); setPage(1); }}>
-          {SEVERITIES.map((s) => <option key={s} value={s}>{s ? s : "all severities"}</option>)}
-        </select>
-        <select className="input" value={filters.action} onChange={(e) => { setFilters({ ...filters, action: e.target.value }); setPage(1); }}>
-          {ACTIONS.map((s) => <option key={s} value={s}>{s ? s : "all actions"}</option>)}
-        </select>
-        <input className="input" placeholder="signature contains…" value={filters.signature} onChange={(e) => setFilters({ ...filters, signature: e.target.value })} />
-        <input className="input" placeholder="source ip" value={filters.source_ip} onChange={(e) => setFilters({ ...filters, source_ip: e.target.value })} />
-        <input className="input" placeholder="destination ip" value={filters.destination_ip} onChange={(e) => setFilters({ ...filters, destination_ip: e.target.value })} />
-      </div>
+      <AdvancedFilters defs={THREAT_FILTERS} value={filters} onChange={setFilters} storageKey="threatflow.filters.threats" />
 
       <div className="panel overflow-x-auto">
         <table className="w-full text-sm">
@@ -78,7 +71,7 @@ export default function ThreatsPage() {
           </thead>
           <tbody>
             {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-muted text-sm">Loading…</td></tr>}
-            {!loading && data?.items.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-muted text-sm">No matches in this window.</td></tr>}
+            {!loading && data?.items.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-muted text-sm">No matches.</td></tr>}
             {!loading && data?.items.map((t) => (
               <tr key={t.event_id} className="border-b border-border last:border-b-0 hover:bg-panel2/40">
                 <td className="px-3 py-2 text-xs text-muted whitespace-nowrap">{new Date(t.event_time).toLocaleTimeString()}</td>
