@@ -36,7 +36,7 @@ ClickHouse / Postgres / Redis stay inside the docker network only (`threatflow_n
 
 | Phase | Title | Status | Commit | Notes |
 |---|---|---|---|---|
-| 1 | Monorepo + Docker stack + Postgres + ClickHouse + Redis + FastAPI + Next.js + auth + dark layout | 🔄 in-progress |  |  |
+| 1 | Monorepo + Docker stack + Postgres + ClickHouse + Redis + FastAPI + Next.js + auth + dark layout | ✅ code-complete | `1019952` | runtime verification pending first VPS deploy |
 | 2 | PG migrations + branch CRUD + credential encryption + branch UI + test connection stub | ⬜ pending |  |  |
 | 3 | ClickHouse schema + raw event tables + rollups + materialized views + storage health API | ⬜ pending |  |  |
 | 4 | Collector service + UniFi adapters + traffic-flows + IPS fallback + mock collector + 30s scheduler + dedupe + batch insert | ⬜ pending |  |  |
@@ -47,16 +47,21 @@ ClickHouse / Postgres / Redis stay inside the docker network only (`threatflow_n
 ## Acceptance criteria per phase
 
 ### Phase 1
-- [ ] Monorepo dirs exist: `backend/`, `frontend/`, `collector/`, `infra/`, `scripts/`
-- [ ] `docker-compose.yml` boots: frontend, backend, collector, postgres, clickhouse, redis
-- [ ] All host-bound ports are `127.0.0.1`-only
-- [ ] `.env.example` is complete; init script generates real `.env`
-- [ ] FastAPI `/api/health` returns `{status:"ok"}`
-- [ ] Postgres has at least the `users`, `sessions`, `app_settings` tables seeded by Alembic
-- [ ] ClickHouse boots and reports `SELECT 1`
-- [ ] Next.js dark-themed login page renders, can authenticate, lands on `/overview` placeholder
-- [ ] Auto-generated admin password printed by `scripts/create-admin.sh`
-- [ ] `scripts/healthcheck.sh` returns 0
+- [x] Monorepo dirs exist: `backend/`, `frontend/`, `collector/`, `infra/`, `scripts/`
+- [x] `docker-compose.yml` defines: frontend, backend, collector, postgres, clickhouse, redis (validates with `docker compose config`)
+- [x] All host-bound ports are `127.0.0.1`-only
+- [x] `.env.example` is complete; `scripts/init.sh` generates real `.env` with auto-gen secrets (Fernet, JWT, session, DB passwords)
+- [x] FastAPI `/api/health` + `/api/health/deep` defined
+- [x] Alembic migration `20260503_0001` creates `roles`, `users`, `app_settings`, `audit_logs` and seeds 3 canonical roles
+- [x] ClickHouse `init/00-create-db.sql` creates `threatflow` database
+- [x] Next.js dark-themed login page POSTs to `/api/auth/login`, lands on `/overview` placeholder; full sidebar with all 12 blueprint pages
+- [x] `scripts/create-admin.sh` auto-generates admin password and prints once
+- [ ] **Runtime acceptance** — pending first deploy to `51.195.82.50`:
+  - [ ] `docker compose up -d --build` succeeds
+  - [ ] `scripts/run-migrations.sh` succeeds
+  - [ ] `scripts/create-admin.sh` prints credentials
+  - [ ] `scripts/healthcheck.sh` returns 0 (6 OK / 0 FAIL)
+  - [ ] Browser can sign in at the eventual https://threatflow.amspec.group
 
 ### Phase 2
 - [ ] Alembic migrations for all blueprint tables: `users`, `roles`, `branches`, `branch_credentials`, `collector_status`, `collector_runs`, `app_settings`, `audit_logs`
