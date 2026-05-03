@@ -1,8 +1,6 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,13 +9,11 @@ from app.auth.jwt_tokens import create_access_token
 from app.auth.passwords import verify_password
 from app.config import settings
 from app.db.session import get_db
+from app.limiter import limiter
 from app.models.user import User
 from app.schemas.auth import CurrentUser, LoginRequest, LoginResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-# Independent limiter so the login endpoint stays tight even when default limits relax
-_login_limiter = Limiter(key_func=get_remote_address)
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -33,7 +29,7 @@ def _set_session_cookie(response: Response, token: str) -> None:
 
 
 @router.post("/login", response_model=LoginResponse)
-@_login_limiter.limit("10/minute")
+@limiter.limit("10/minute")
 async def login(request: Request, payload: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
     user = (await db.execute(select(User).where(User.email == payload.email))).scalar_one_or_none()
     if user is None or not user.enabled or not verify_password(payload.password, user.password_hash):
