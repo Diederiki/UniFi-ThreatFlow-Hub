@@ -65,7 +65,7 @@ ClickHouse / Postgres / Redis stay inside the docker network only (`threatflow_n
   - [x] Bad password → 401
   - [x] Collector heartbeats every 30s (mock=True)
   - [x] Existing 5 production sites on the VPS unaffected by the new nginx server block
-  - [ ] Browser sign-in at https://threatflow.amspec.group — **blocked on Cloudflare DNS A record + `certbot --nginx`** (handed off to user)
+  - [x] **Browser sign-in at https://threatflow.amspec.group LIVE** — DNS resolved, `certbot --nginx` succeeded, LE cert good till 2026-08-01, `/login` + `/api/health` both 200 over HTTPS, all 5 other VPS sites unaffected (compress 307, share 307, servicedesk 200, expense 200, stock-report 200)
 
 ### Phase 2
 - [ ] Alembic migrations for all blueprint tables: `users`, `roles`, `branches`, `branch_credentials`, `collector_status`, `collector_runs`, `app_settings`, `audit_logs`
