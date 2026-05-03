@@ -30,10 +30,13 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 @router.get("/overview", response_model=OverviewResponse)
 async def overview(
     timeframe: str = Query(default="24h"),
+    branch_id: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
     tf = parse(timeframe)
+    branch_filter = " AND branch_id = {bid:UUID}" if branch_id else ""
+    branch_params: dict = {"bid": branch_id} if branch_id else {}
 
     # Cheap counts from PG
     total_branches = (await db.execute(select(func.count(Branch.id)))).scalar_one()
@@ -61,9 +64,9 @@ async def overview(
             uniqMerge(unique_clients)    AS uniq_c
         FROM threatflow.{tf.rollup_table}
         WHERE window_start >= {{since:DateTime64(3,'UTC')}}
-          AND window_start <  {{until:DateTime64(3,'UTC')}}
+          AND window_start <  {{until:DateTime64(3,'UTC')}}{branch_filter}
         """,
-        {"since": tf.since, "until": tf.until},
+        {"since": tf.since, "until": tf.until, **branch_params},
     )
     kpis = OverviewKpis(
         total_branches=int(total_branches),
@@ -89,12 +92,12 @@ async def overview(
             sumMerge(high_risk_events) AS high_r
         FROM threatflow.{tf.rollup_table}
         WHERE window_start >= {{since:DateTime64(3,'UTC')}}
-          AND window_start <  {{until:DateTime64(3,'UTC')}}
+          AND window_start <  {{until:DateTime64(3,'UTC')}}{branch_filter}
         GROUP BY branch_id, branch_code, branch_name
         ORDER BY ids DESC, blocked DESC
         LIMIT 50
         """,
-        {"since": tf.since, "until": tf.until},
+        {"since": tf.since, "until": tf.until, **branch_params},
     )
     branch_heat = [
         BranchHeatRow(
@@ -132,9 +135,12 @@ async def overview(
 @router.get("/traffic-trend", response_model=TrendResponse)
 async def traffic_trend(
     timeframe: str = Query(default="24h"),
+    branch_id: str | None = Query(default=None),
     _user: User = Depends(get_current_user),
 ):
     tf = parse(timeframe)
+    bf = " AND branch_id = {bid:UUID}" if branch_id else ""
+    bp: dict = {"bid": branch_id} if branch_id else {}
     rows = await ch.query(
         f"""
         SELECT
@@ -143,11 +149,11 @@ async def traffic_trend(
             sumMerge(blocked_flows) AS blocked
         FROM threatflow.{tf.rollup_table}
         WHERE window_start >= {{since:DateTime64(3,'UTC')}}
-          AND window_start <  {{until:DateTime64(3,'UTC')}}
+          AND window_start <  {{until:DateTime64(3,'UTC')}}{bf}
         GROUP BY t
         ORDER BY t
         """,
-        {"since": tf.since, "until": tf.until},
+        {"since": tf.since, "until": tf.until, **bp},
     )
     return TrendResponse(
         timeframe=tf.timeframe,
@@ -162,9 +168,12 @@ async def traffic_trend(
 @router.get("/threat-trend", response_model=TrendResponse)
 async def threat_trend(
     timeframe: str = Query(default="24h"),
+    branch_id: str | None = Query(default=None),
     _user: User = Depends(get_current_user),
 ):
     tf = parse(timeframe)
+    bf = " AND branch_id = {bid:UUID}" if branch_id else ""
+    bp: dict = {"bid": branch_id} if branch_id else {}
     rows = await ch.query(
         f"""
         SELECT
@@ -174,11 +183,11 @@ async def threat_trend(
             sumMerge(medium_risk_events) AS med_r
         FROM threatflow.{tf.rollup_table}
         WHERE window_start >= {{since:DateTime64(3,'UTC')}}
-          AND window_start <  {{until:DateTime64(3,'UTC')}}
+          AND window_start <  {{until:DateTime64(3,'UTC')}}{bf}
         GROUP BY t
         ORDER BY t
         """,
-        {"since": tf.since, "until": tf.until},
+        {"since": tf.since, "until": tf.until, **bp},
     )
     return TrendResponse(
         timeframe=tf.timeframe,

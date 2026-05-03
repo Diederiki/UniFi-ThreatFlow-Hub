@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 
 from app.api import (
-    auth, branches, clients, collectors, dashboard, events, health,
-    observability, operations, storage, suspicion, top,
+    auth, blocked, branches, clients, collectors, dashboard, events, health,
+    observability, operations, settings, storage, suspicion, top,
 )
 
 api_router = APIRouter(prefix="/api")
@@ -18,3 +18,5 @@ api_router.include_router(clients.router)
 api_router.include_router(suspicion.router)
 api_router.include_router(observability.router)
 api_router.include_router(operations.router)
+api_router.include_router(blocked.router)
+api_router.include_router(settings.router)

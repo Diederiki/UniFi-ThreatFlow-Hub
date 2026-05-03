@@ -1,9 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { eventsApi, topApi, type EventsPage, type FlowEvent, type Top } from "@/lib/dashboard";
+import { eventsApi, type EventsPage, type FlowEvent, type Top, type Trend } from "@/lib/dashboard";
+import { api } from "@/lib/api";
 import { TopList } from "@/components/TopList";
+import { TrendArea } from "@/components/charts/TrendArea";
 import { useTimeframe } from "@/lib/timeframe";
+import type { Timeframe } from "@/lib/timeframe";
+
+const blockedApi = {
+  topDestinations: (tf: Timeframe, limit = 10) => api<Top>(`/blocked/top-destinations?timeframe=${tf}&limit=${limit}`),
+  topClients:      (tf: Timeframe, limit = 10) => api<Top>(`/blocked/top-clients?timeframe=${tf}&limit=${limit}`),
+  topPolicies:     (tf: Timeframe, limit = 10) => api<Top>(`/blocked/top-policies?timeframe=${tf}&limit=${limit}`),
+  topCountries:    (tf: Timeframe, limit = 10) => api<Top>(`/blocked/top-countries?timeframe=${tf}&limit=${limit}`),
+  trend:           (tf: Timeframe) => api<Trend>(`/blocked/trend?timeframe=${tf}`),
+};
 
 export default function BlockedPage() {
   const { timeframe } = useTimeframe();
@@ -11,14 +22,23 @@ export default function BlockedPage() {
   const [data, setData] = useState<EventsPage<FlowEvent> | null>(null);
   const [topDst, setTopDst] = useState<Top | null>(null);
   const [topClt, setTopClt] = useState<Top | null>(null);
+  const [topPol, setTopPol] = useState<Top | null>(null);
+  const [topCo, setTopCo] = useState<Top | null>(null);
+  const [trend, setTrend] = useState<Trend | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([
       eventsApi.blocked(timeframe, { page, page_size: 50 }),
-      topApi.destinations(timeframe, 10),
-      topApi.clients(timeframe, 10),
-    ]).then(([d, dst, clt]) => { if (cancelled) return; setData(d); setTopDst(dst); setTopClt(clt); });
+      blockedApi.topDestinations(timeframe),
+      blockedApi.topClients(timeframe),
+      blockedApi.topPolicies(timeframe),
+      blockedApi.topCountries(timeframe),
+      blockedApi.trend(timeframe),
+    ]).then(([d, dst, clt, pol, co, tr]) => {
+      if (cancelled) return;
+      setData(d); setTopDst(dst); setTopClt(clt); setTopPol(pol); setTopCo(co); setTrend(tr);
+    });
     return () => { cancelled = true; };
   }, [timeframe, page]);
 
@@ -29,9 +49,18 @@ export default function BlockedPage() {
         <p className="text-xs text-muted">~{data?.total_estimate.toLocaleString() ?? "—"} blocked sessions in last {timeframe} · page {page}</p>
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
-        <TopList title="Top blocked destinations" data={topDst} />
-        <TopList title="Top blocked clients"      data={topClt} />
+      <div className="panel p-4">
+        <div className="flex items-baseline justify-between mb-2">
+          <div className="text-xs uppercase text-muted">Blocked trend ({trend?.bucket_label ?? "—"})</div>
+        </div>
+        <TrendArea trend={trend} height={180} />
+      </div>
+
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <TopList title="Top destinations" data={topDst} />
+        <TopList title="Top clients"      data={topClt} />
+        <TopList title="Top policies"     data={topPol} />
+        <TopList title="Top countries"    data={topCo} />
       </div>
 
       <div className="panel overflow-x-auto">

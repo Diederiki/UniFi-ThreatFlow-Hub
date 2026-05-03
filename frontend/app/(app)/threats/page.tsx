@@ -36,6 +36,11 @@ export default function ThreatsPage() {
 
   useEffect(() => { reload(); }, [timeframe, page, JSON.stringify(filters)]);
 
+  function csvUrl(): string {
+    const p = new URLSearchParams({ timeframe, ...Object.fromEntries(Object.entries(filters).filter(([,v]) => v)) });
+    return `/api/threats.csv?${p.toString()}`;
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-baseline justify-between">
@@ -43,6 +48,7 @@ export default function ThreatsPage() {
           <h1 className="text-lg font-semibold">Threats</h1>
           <p className="text-xs text-muted">~{data?.total_estimate.toLocaleString() ?? "—"} events in last {timeframe} · page {page}</p>
         </div>
+        <a href={csvUrl()} className="btn text-xs">Export CSV</a>
       </div>
 
       <div className="panel p-3 grid grid-cols-2 sm:grid-cols-5 gap-2 text-sm">

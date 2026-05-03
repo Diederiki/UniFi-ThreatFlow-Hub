@@ -60,6 +60,11 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    # HSTS — browsers auto-upgrade http://threatflow.amspec.group to HTTPS and
+    # remember it for 2 years. includeSubDomains is safe because we don't host
+    # http-only subdomains under threatflow.amspec.group.
+    if settings.is_production:
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
     return response
 
 

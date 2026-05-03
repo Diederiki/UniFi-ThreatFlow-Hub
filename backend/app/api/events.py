@@ -7,7 +7,10 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+import csv
+import io
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 
 from app.auth.dependencies import get_current_user
 from app.clickhouse import client as ch
@@ -102,6 +105,54 @@ async def list_threats(
     )
     total_est = int((est or {}).get("c") or 0)
     return EventsPage(timeframe=tf.timeframe, items=items, next_offset=next_offset, total_estimate=total_est)
+
+
+@router.get("/threats.csv")
+async def export_threats_csv(
+    timeframe: str = Query(default="24h"),
+    branch_id: str | None = Query(default=None),
+    severity: str | None = Query(default=None),
+    signature: str | None = Query(default=None),
+    source_ip: str | None = Query(default=None),
+    destination_ip: str | None = Query(default=None),
+    action: str | None = Query(default=None),
+    limit: int = Query(default=10000, ge=1, le=100000),
+    _user: User = Depends(get_current_user),
+):
+    """Export filtered threats to CSV. Capped at 100k rows for one request."""
+    tf = parse(timeframe)
+    where = ["event_time >= {since:DateTime64(3,'UTC')}", "event_time < {until:DateTime64(3,'UTC')}"]
+    params = {"since": tf.since, "until": tf.until, "limit": limit}
+    if branch_id:      where.append("branch_id = {bid:UUID}");           params["bid"] = branch_id
+    if severity:       where.append("severity = {sev:String}");          params["sev"] = severity
+    if signature:      where.append("positionCaseInsensitive(signature, {sig:String}) > 0"); params["sig"] = signature
+    if source_ip:      where.append("source_ip = {sip:String}");         params["sip"] = source_ip
+    if destination_ip: where.append("destination_ip = {dip:String}");    params["dip"] = destination_ip
+    if action:         where.append("action = {act:String}");            params["act"] = action
+
+    sql = f"""
+        SELECT event_time, branch_code, branch_name, action, severity, risk,
+               signature, threat_category, source_ip, source_hostname,
+               destination_ip, destination_hostname, destination_country,
+               protocol, policy_type, policy_name
+        FROM threatflow.raw_threat_events
+        WHERE {" AND ".join(where)}
+        ORDER BY event_time DESC
+        LIMIT {{limit:UInt32}}
+    """
+    rows = await ch.query(sql, params)
+
+    buf = io.StringIO()
+    if rows:
+        writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        for r in rows:
+            writer.writerow({k: ("" if v is None else v) for k, v in r.items()})
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=threats-{tf.timeframe}.csv"},
+    )
 
 
 @router.get("/threats/{event_id}", response_model=ThreatEvent)

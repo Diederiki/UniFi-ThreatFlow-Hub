@@ -51,6 +51,33 @@ async def list_clients(
     )
 
 
+@router.get("/{client_ip}", response_model=ClientSummary)
+async def client_summary(client_ip: str, timeframe: str = Query(default="24h"), _user: User = Depends(get_current_user)):
+    """Per-client summary over the timeframe."""
+    tf = parse(timeframe)
+    row = await ch.query_one(
+        """
+        SELECT
+            source_ip AS client_ip,
+            any(branch_code) AS branch_code,
+            count() AS flows,
+            countIf(action = 'block') AS blocked,
+            countIf(policy_type IN ('ids','ips','ids_ips')) AS threats,
+            sum(bytes_up) AS bytes_up,
+            sum(bytes_down) AS bytes_down
+        FROM threatflow.raw_flow_events
+        WHERE event_time >= {since:DateTime64(3,'UTC')}
+          AND event_time <  {until:DateTime64(3,'UTC')}
+          AND source_ip = {ip:String}
+        GROUP BY source_ip
+        """,
+        {"since": tf.since, "until": tf.until, "ip": client_ip},
+    )
+    if not row:
+        return ClientSummary(client_ip=client_ip, branch_code="", flows=0, blocked=0, threats=0, bytes_up=0, bytes_down=0)
+    return ClientSummary(**row)
+
+
 @router.get("/{client_ip}/flows", response_model=EventsPage)
 async def client_flows(
     client_ip: str,

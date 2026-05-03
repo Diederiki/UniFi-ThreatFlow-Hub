@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { clientsApi, type ClientList } from "@/lib/dashboard";
 import { useTimeframe } from "@/lib/timeframe";
@@ -50,8 +51,10 @@ export default function ClientsPage() {
           <tbody>
             {data?.items.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-muted text-sm">No clients matched.</td></tr>}
             {data?.items.map((c) => (
-              <tr key={c.client_ip} className="border-b border-border last:border-b-0">
-                <td className="px-3 py-2 num">{c.client_ip}</td>
+              <tr key={c.client_ip} className="border-b border-border last:border-b-0 hover:bg-panel2/40">
+                <td className="px-3 py-2 num">
+                  <Link href={`/clients/${encodeURIComponent(c.client_ip)}`} className="hover:text-accent">{c.client_ip}</Link>
+                </td>
                 <td className="px-3 py-2 num text-xs text-muted">{c.branch_code}</td>
                 <td className="px-3 py-2 text-right num">{c.flows.toLocaleString()}</td>
                 <td className="px-3 py-2 text-right num text-danger/90">{c.blocked.toLocaleString()}</td>

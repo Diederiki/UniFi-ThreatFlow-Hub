@@ -1,6 +1,10 @@
 from typing import Any
 
 from app.adapters.base import BaseUniFiCollector, CollectResult
+from app.adapters.inventory import (
+    UniFiClientInventoryCollector,
+    UniFiDeviceInventoryCollector,
+)
 from app.adapters.local_controller import LocalControllerAdapter
 from app.adapters.mock import MockCollector
 from app.adapters.unifi_cloud import UnifiCloudAdapter
@@ -11,6 +15,8 @@ __all__ = [
     "CollectResult",
     "LocalControllerAdapter",
     "MockCollector",
+    "UnifiClientInventoryCollector",
+    "UniFiDeviceInventoryCollector",
     "UnifiCloudAdapter",
     "select_adapter",
 ]
