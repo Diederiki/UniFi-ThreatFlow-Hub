@@ -39,7 +39,7 @@ ClickHouse / Postgres / Redis stay inside the docker network only (`threatflow_n
 | 1 | Monorepo + Docker stack + Postgres + ClickHouse + Redis + FastAPI + Next.js + auth + dark layout | ✅ code-complete | `1019952` | runtime verification pending first VPS deploy |
 | 2 | PG migrations + branch CRUD + credential encryption + branch UI + test connection stub | ✅ done | `566e4d9` | E2E verified on VPS — Fernet ciphertext confirmed in DB, 0 plaintext leaks anywhere |
 | 3 | ClickHouse schema + raw event tables + rollups + materialized views + storage health API | ✅ done | `f16bd16` | 13 CH tables/MVs live, MV propagation verified, 7 TTLs read correctly |
-| 4 | Collector service + UniFi adapters + traffic-flows + IPS fallback + mock collector + 30s scheduler + dedupe + batch insert | ⬜ pending |  |  |
+| 4 | Collector service + UniFi adapters + traffic-flows + IPS fallback + mock collector + 30s scheduler + dedupe + batch insert | ✅ done | `cae91d1` | 5 mock branches × 30s tick → 6823 raw flows + 343 threats in 2 min, 0 failed inserts, all rollups + topK/uniq state verified |
 | 5 | Dashboard APIs + overview/threats/blocked/top-visited/branch-detail/collector-health pages | ⬜ pending |  |  |
 | 6 | Suspicion scoring + scoring settings + top suspicious lists + trend charts | ⬜ pending |  |  |
 | 7 | Tests + docs + production hardening + backup/restore + deploy to `threatflow.amspec.group` | ⬜ pending |  |  |

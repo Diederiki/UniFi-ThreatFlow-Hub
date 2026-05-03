@@ -2,23 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { TIMEFRAMES, useTimeframe } from "@/lib/timeframe";
 
-export const TIMEFRAMES = [
-  "5m", "15m", "1h", "4h", "12h", "24h",
-  "3d", "7d", "14d", "1m", "6m", "1y",
-] as const;
-export type Timeframe = typeof TIMEFRAMES[number];
-
-export function Topbar({
-  user,
-  timeframe,
-  onTimeframeChange,
-}: {
-  user?: { email: string; role: string };
-  timeframe: Timeframe;
-  onTimeframeChange: (t: Timeframe) => void;
-}) {
+export function Topbar({ user }: { user?: { email: string; role: string } }) {
   const router = useRouter();
+  const { timeframe, setTimeframe } = useTimeframe();
 
   async function logout() {
     await api("/auth/logout", { method: "POST" });
@@ -33,7 +21,7 @@ export function Topbar({
           return (
             <button
               key={t}
-              onClick={() => onTimeframeChange(t)}
+              onClick={() => setTimeframe(t)}
               className={
                 "px-2.5 py-1 text-xs rounded-md border transition-colors " +
                 (active
