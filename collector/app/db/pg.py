@@ -84,10 +84,7 @@ async def close_run(
             last_duration_ms, last_event_count, last_endpoint_used,
             unifi_os_version, network_app_version, collector_version, updated_at
         ) VALUES (
-            :bid, :status,
-            CASE WHEN :status = 'ok' THEN now() ELSE NULL END,
-            CASE WHEN :status = 'error' THEN now() ELSE NULL END,
-            :err, :dur, :ec, :ep, :osv, :napp, :cv, now()
+            :bid, :status, :ok_at, :err_at, :err, :dur, :ec, :ep, :osv, :napp, :cv, now()
         )
         ON CONFLICT (branch_id) DO UPDATE SET
             status = EXCLUDED.status,
@@ -103,6 +100,9 @@ async def close_run(
             updated_at = now()
         """
     )
+    now_ts = datetime.now(timezone.utc)
+    ok_at = now_ts if status == "ok" else None
+    err_at = now_ts if status == "error" else None
     async with SessionLocal() as db:
         await db.execute(
             finish_sql,
@@ -111,8 +111,9 @@ async def close_run(
         await db.execute(
             upsert_sql,
             {
-                "bid": str(branch_id), "status": status, "err": error_message,
-                "dur": duration_ms, "ec": event_count, "ep": endpoint_used,
+                "bid": str(branch_id), "status": status,
+                "ok_at": ok_at, "err_at": err_at,
+                "err": error_message, "dur": duration_ms, "ec": event_count, "ep": endpoint_used,
                 "osv": unifi_os_version, "napp": network_app_version, "cv": collector_version,
             },
         )
