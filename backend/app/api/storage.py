@@ -133,16 +133,17 @@ _TTL_RE = re.compile(r"INTERVAL\s+(\d+)\s+DAY", re.IGNORECASE)
 
 
 async def _current_ttls() -> list[RetentionPolicy]:
+    # `create_table_query` includes the full TTL clause; `engine_full` does not on 24.x.
     rows = await ch.query(
-        "SELECT name, engine_full FROM system.tables "
+        "SELECT name, create_table_query FROM system.tables "
         "WHERE database = {db:String} AND name IN ({names:Array(String)})",
         {"db": settings.clickhouse_db, "names": TRACKED_TABLES},
     )
     items: list[RetentionPolicy] = []
-    by_name = {r["name"]: r["engine_full"] for r in rows}
+    by_name = {r["name"]: r["create_table_query"] for r in rows}
     for tbl in TRACKED_TABLES:
-        engine = by_name.get(tbl, "") or ""
-        m = _TTL_RE.search(engine)
+        ddl = by_name.get(tbl, "") or ""
+        m = _TTL_RE.search(ddl)
         days = int(m.group(1)) if m else 0
         items.append(RetentionPolicy(table=tbl, ttl_days=days))
     return items
