@@ -86,3 +86,31 @@ async def top_clients(timeframe: str = Query(default="24h"), limit: int = Query(
 @router.get("/countries", response_model=TopResponse)
 async def top_countries(timeframe: str = Query(default="24h"), limit: int = Query(default=20, ge=1, le=100), _user: User = Depends(get_current_user)):
     return TopResponse(timeframe=parse(timeframe).timeframe, items=await _topk_with_counts("countries", timeframe, limit))
+
+
+@router.get("/signatures", response_model=TopResponse)
+async def top_signatures(
+    timeframe: str = Query(default="24h"),
+    limit: int = Query(default=20, ge=1, le=100),
+    branch_id: str | None = Query(default=None),
+    _user: User = Depends(get_current_user),
+):
+    """Top IDS/IPS signatures from raw_threat_events. Counted directly because
+    rollups don't store signature topK."""
+    tf = parse(timeframe)
+    bf = " AND branch_id = {bid:UUID}" if branch_id else ""
+    bp: dict = {"bid": branch_id} if branch_id else {}
+    rows = await ch.query(
+        f"""
+        SELECT signature AS label, count() AS c
+        FROM threatflow.raw_threat_events
+        WHERE event_time >= {{since:DateTime64(3,'UTC')}}
+          AND event_time <  {{until:DateTime64(3,'UTC')}}{bf}
+          AND signature != ''
+        GROUP BY label
+        ORDER BY c DESC
+        LIMIT {{limit:UInt32}}
+        """,
+        {"since": tf.since, "until": tf.until, "limit": limit, **bp},
+    )
+    return TopResponse(timeframe=tf.timeframe, items=[TopItem(label=str(r["label"]), value=int(r["c"])) for r in rows])

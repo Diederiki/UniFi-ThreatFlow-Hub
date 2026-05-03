@@ -82,3 +82,15 @@ async def run_branch(
     if branch is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="branch_not_found")
     return {"queued": True, "branch_id": str(branch_id)}
+
+
+@router.post("/run-all", status_code=status.HTTP_202_ACCEPTED)
+async def run_all(
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(require_role("admin", "operator")),
+):
+    """Acknowledge a 'kick all enabled branches' request. The scheduler is
+    already polling every 30s; this endpoint exists for the blueprint surface
+    and as a future Redis-pubsub trigger point."""
+    enabled = (await db.execute(select(Branch).where(Branch.enabled.is_(True)))).scalars().all()
+    return {"queued": True, "branches_queued": [str(b.id) for b in enabled], "count": len(enabled)}
