@@ -1,7 +1,12 @@
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 
 from app.api.router import api_router
 from app.config import settings
@@ -11,13 +16,22 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)-5s %(name)s :: %(message)s",
 )
 
+# Default 60 req/min per IP. /api/auth/login gets a tighter 10/min cap on top.
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["60/minute"] if settings.is_production else ["1000/minute"],
+)
+
 app = FastAPI(
     title=settings.app_name,
-    version="0.1.0",
+    version="0.7.0",
     docs_url=None if settings.is_production else "/api/docs",
     redoc_url=None,
     openapi_url=None if settings.is_production else "/api/openapi.json",
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,6 +40,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    return response
+
 
 app.include_router(api_router)
 

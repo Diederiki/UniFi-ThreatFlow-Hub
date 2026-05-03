@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +15,9 @@ from app.models.user import User
 from app.schemas.auth import CurrentUser, LoginRequest, LoginResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+# Independent limiter so the login endpoint stays tight even when default limits relax
+_login_limiter = Limiter(key_func=get_remote_address)
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -28,7 +33,8 @@ def _set_session_cookie(response: Response, token: str) -> None:
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(payload: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
+@_login_limiter.limit("10/minute")
+async def login(request: Request, payload: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
     user = (await db.execute(select(User).where(User.email == payload.email))).scalar_one_or_none()
     if user is None or not user.enabled or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="invalid_credentials")
