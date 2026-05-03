@@ -2,12 +2,14 @@ from fastapi import APIRouter
 
 from app.api import (
     auth, blocked, branches, clients, collectors, dashboard, events, health,
-    observability, operations, settings, storage, suspicion, top,
+    observability, operations, settings, sso, storage, suspicion, top, users,
 )
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(health.router, tags=["health"])
 api_router.include_router(auth.router)
+api_router.include_router(sso.router)        # /api/auth/sso/* — registered after auth so prefix conflict is impossible
+api_router.include_router(users.router)
 api_router.include_router(branches.router)
 api_router.include_router(storage.router)
 api_router.include_router(collectors.router)

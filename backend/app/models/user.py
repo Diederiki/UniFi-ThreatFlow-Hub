@@ -24,6 +24,10 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(64), nullable=False, default="admin")
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    auth_method: Mapped[str] = mapped_column(String(32), nullable=False, default="local")
+    sso_subject: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
+    # Reject any JWT whose iat is older than this — used by "sign out everywhere"
+    min_token_iat: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

@@ -34,6 +34,12 @@ async def get_current_user(
     user = (await db.execute(select(User).where(User.email == sub))).scalar_one_or_none()
     if user is None or not user.enabled:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="user_disabled")
+
+    # Token revocation: reject any JWT issued before user.min_token_iat.
+    if user.min_token_iat is not None:
+        iat = payload.get("iat")
+        if iat is not None and int(iat) < int(user.min_token_iat.timestamp()):
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="token_revoked")
     return user
 
 
