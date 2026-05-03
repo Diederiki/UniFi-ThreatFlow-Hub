@@ -18,7 +18,7 @@ router = APIRouter(prefix="/operations", tags=["operations"])
 
 @router.get("/last-prune", response_model=PruneReportOut | None)
 async def last_prune(_user: User = Depends(get_current_user)) -> PruneReportOut | None:
-    r = pruner.last_report()
+    r = await pruner.last_report_persisted()
     return None if r is None else PruneReportOut(**r.__dict__)
 
 

@@ -40,9 +40,9 @@ ClickHouse / Postgres / Redis stay inside the docker network only (`threatflow_n
 | 2 | PG migrations + branch CRUD + credential encryption + branch UI + test connection stub | ✅ done | `566e4d9` | E2E verified on VPS — Fernet ciphertext confirmed in DB, 0 plaintext leaks anywhere |
 | 3 | ClickHouse schema + raw event tables + rollups + materialized views + storage health API | ✅ done | `f16bd16` | 13 CH tables/MVs live, MV propagation verified, 7 TTLs read correctly |
 | 4 | Collector service + UniFi adapters + traffic-flows + IPS fallback + mock collector + 30s scheduler + dedupe + batch insert | ✅ done | `cae91d1` | 5 mock branches × 30s tick → 6823 raw flows + 343 threats in 2 min, 0 failed inserts, all rollups + topK/uniq state verified |
-| 5 | Dashboard APIs + overview/threats/blocked/top-visited/branch-detail/collector-health pages | ⬜ pending |  |  |
-| 6 | Suspicion scoring + scoring settings + top suspicious lists + trend charts | ⬜ pending |  |  |
-| 7 | Tests + docs + production hardening + backup/restore + deploy to `threatflow.amspec.group` | ⬜ pending |  |  |
+| 5 | Dashboard APIs + overview/threats/blocked/top-visited/branch-detail/collector-health pages | ✅ done | `d385d3f` | 10/10 pages 200, 6 top endpoints + overview + trends serving real mock data |
+| 6 | Suspicion scoring + scoring settings + top suspicious lists + trend charts | ✅ done | `81a8431` | configurable weights /api/scoring (admin, audit-logged), 4 suspicion endpoints, all 12 dashboard pages 200 |
+| 7 | Tests + docs + production hardening + backup/restore + deploy + LIVE Operations page + auto-pruner | ✅ done | `4af7882` | 26/26 E2E green; pytest 22 pass; nginx + LE cert; backup/restore + reclaim.sh; live host telemetry + hourly pruner with disk watchdog |
 
 ## Acceptance criteria per phase
 
