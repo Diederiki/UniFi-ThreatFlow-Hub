@@ -4,6 +4,12 @@ Alembic env imports `register_all` so autogenerate sees them all.
 from app.models.user import Role, User  # noqa: F401
 from app.models.app_setting import AppSetting  # noqa: F401
 from app.models.audit import AuditLog  # noqa: F401
+from app.models.branch import (  # noqa: F401
+    Branch,
+    BranchCredential,
+    CollectorRun,
+    CollectorStatus,
+)
 
 
 def register_all() -> None:
