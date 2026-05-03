@@ -3,6 +3,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Pull POSTGRES_USER / REDIS_PASSWORD / etc. from .env so the inline auth checks below work
+if [[ -f .env ]]; then
+    set -a; source .env; set +a
+fi
+
 PASS=0; FAIL=0
 ok()   { echo "  [OK]   $*"; PASS=$((PASS+1)); }
 fail() { echo "  [FAIL] $*"; FAIL=$((FAIL+1)); }
