@@ -1,0 +1,52 @@
+# env / secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+.fernet_key
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# node
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# claude / ops scratch
+.claude/
+*.bak
+*.backup
+
+# docker volume mounts (if ever bind-mounted)
+data/
+volumes/

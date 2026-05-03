@@ -1,0 +1,41 @@
+# Local development overrides — applied automatically by docker compose.
+# Mounts source for live reload and exposes DBs on loopback for psql/clickhouse-client.
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:15432:5432"
+
+  clickhouse:
+    ports:
+      - "127.0.0.1:18123:8123"
+      - "127.0.0.1:19000:9000"
+
+  redis:
+    ports:
+      - "127.0.0.1:16379:6379"
+
+  backend:
+    environment:
+      APP_ENV: development
+      LOG_LEVEL: debug
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/alembic:/app/alembic
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  collector:
+    environment:
+      APP_ENV: development
+      LOG_LEVEL: debug
+    volumes:
+      - ./collector/app:/app/app
+
+  frontend:
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./frontend/app:/app/app
+      - ./frontend/components:/app/components
+      - ./frontend/lib:/app/lib
+      - ./frontend/styles:/app/styles
+    command: ["npm", "run", "dev"]

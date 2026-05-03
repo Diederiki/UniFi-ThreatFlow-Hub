@@ -1,0 +1,161 @@
+name: threatflow
+
+# All services bind to 127.0.0.1 on the host because this stack co-tenants
+# with other apps on the production VPS. Public access is via the host's
+# nginx, terminated at threatflow.amspec.group.
+
+x-common-env: &common-env
+  APP_NAME: ${APP_NAME}
+  APP_ENV: ${APP_ENV}
+  LOG_LEVEL: ${LOG_LEVEL}
+  MOCK_DATA: ${MOCK_DATA}
+
+x-pg-env: &pg-env
+  POSTGRES_HOST: ${POSTGRES_HOST}
+  POSTGRES_PORT: ${POSTGRES_PORT}
+  POSTGRES_DB: ${POSTGRES_DB}
+  POSTGRES_USER: ${POSTGRES_USER}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+x-ch-env: &ch-env
+  CLICKHOUSE_HOST: ${CLICKHOUSE_HOST}
+  CLICKHOUSE_HTTP_PORT: ${CLICKHOUSE_HTTP_PORT}
+  CLICKHOUSE_NATIVE_PORT: ${CLICKHOUSE_NATIVE_PORT}
+  CLICKHOUSE_DB: ${CLICKHOUSE_DB}
+  CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+  CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+
+x-redis-env: &redis-env
+  REDIS_HOST: ${REDIS_HOST}
+  REDIS_PORT: ${REDIS_PORT}
+  REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+x-secret-env: &secret-env
+  SESSION_SECRET: ${SESSION_SECRET}
+  JWT_SECRET: ${JWT_SECRET}
+  FERNET_KEY: ${FERNET_KEY}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [threatflow_net]
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+      - ./infra/clickhouse/init:/docker-entrypoint-initdb.d:ro
+      - ./infra/clickhouse/config:/etc/clickhouse-server/config.d:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [threatflow_net]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [threatflow_net]
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      <<: [*common-env, *pg-env, *ch-env, *redis-env, *secret-env]
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS}
+      BACKEND_HOST: 0.0.0.0
+      BACKEND_PORT: 8000
+      BACKEND_WORKERS: ${BACKEND_WORKERS}
+    ports:
+      - "127.0.0.1:${HOST_BACKEND_PORT}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health').status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks: [threatflow_net]
+
+  collector:
+    build:
+      context: ./collector
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      <<: [*common-env, *pg-env, *ch-env, *redis-env, *secret-env]
+      COLLECTOR_INTERVAL_SECONDS: ${COLLECTOR_INTERVAL_SECONDS}
+      COLLECTOR_MAX_CONCURRENT: ${COLLECTOR_MAX_CONCURRENT}
+      COLLECTOR_TIMEOUT_SECONDS: ${COLLECTOR_TIMEOUT_SECONDS}
+      COLLECTOR_RETRIES: ${COLLECTOR_RETRIES}
+      CH_BATCH_SIZE: ${CH_BATCH_SIZE}
+      CH_FLUSH_INTERVAL_MS: ${CH_FLUSH_INTERVAL_MS}
+      CH_INSERT_RETRIES: ${CH_INSERT_RETRIES}
+    networks: [threatflow_net]
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME}
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE}
+    restart: unless-stopped
+    depends_on:
+      backend: { condition: service_healthy }
+    environment:
+      NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME}
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE}
+      INTERNAL_API_BASE: http://backend:8000
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:${HOST_FRONTEND_PORT}:3000"
+    networks: [threatflow_net]
+
+volumes:
+  postgres_data:
+  clickhouse_data:
+  clickhouse_logs:
+  redis_data:
+
+networks:
+  threatflow_net:
+    driver: bridge

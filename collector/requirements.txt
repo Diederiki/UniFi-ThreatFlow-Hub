@@ -1,0 +1,8 @@
+httpx==0.28.1
+redis==5.2.1
+SQLAlchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+clickhouse-connect==0.8.10
+pydantic==2.10.4
+pydantic-settings==2.7.0
+cryptography==44.0.0

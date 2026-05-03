@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body {
+  @apply bg-bg text-text antialiased;
+  min-height: 100vh;
+}
+
+/* Subtle radial backdrop for the SOC look */
+body {
+  background-image:
+    radial-gradient(60rem 40rem at 10% -10%, rgba(124, 58, 237, 0.10), transparent 60%),
+    radial-gradient(50rem 30rem at 110% 10%, rgba(34, 211, 238, 0.08), transparent 60%);
+  background-attachment: fixed;
+}
+
+/* Reusable surface */
+.panel {
+  @apply bg-panel border border-border rounded-xl;
+}
+.panel-hover {
+  @apply hover:bg-panel2 transition-colors;
+}
+
+/* Pill button */
+.btn {
+  @apply inline-flex items-center justify-center px-3 py-1.5 rounded-md text-sm font-medium
+         border border-border bg-panel hover:bg-panel2 transition-colors;
+}
+.btn-primary {
+  @apply bg-accent text-bg border-transparent hover:opacity-90;
+}
+
+/* Form inputs */
+.input {
+  @apply w-full bg-panel2 border border-border rounded-md px-3 py-2 text-sm
+         focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent/60;
+}
+
+/* Mono numbers */
+.num { @apply font-mono tabular-nums; }
