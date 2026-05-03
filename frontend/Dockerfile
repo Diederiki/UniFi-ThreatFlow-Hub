@@ -1,7 +1,9 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm install --omit=dev --no-audit --no-fund || npm install --no-audit --no-fund
+# Need dev deps (typescript, tailwindcss, postcss) at build time. Standalone
+# output bundles only what's actually imported, so the runner stage stays slim.
+RUN npm install --no-audit --no-fund
 
 FROM node:20-alpine AS builder
 WORKDIR /app
