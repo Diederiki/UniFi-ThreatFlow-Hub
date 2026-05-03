@@ -2,6 +2,8 @@
 strict time bounds so it stays cheap."""
 from __future__ import annotations
 
+import ipaddress
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.auth.dependencies import get_current_user
@@ -11,6 +13,16 @@ from app.schemas.dashboard import ClientList, ClientSummary, EventsPage, FlowEve
 from app.utils.timeframe import parse
 
 router = APIRouter(prefix="/clients", tags=["clients"])
+
+
+def _validate_ip(ip: str) -> str:
+    """Reject anything that isn't a valid IPv4/IPv6 — prevents arbitrary
+    strings being passed to ClickHouse that would force partition scans."""
+    try:
+        ipaddress.ip_address(ip)
+    except ValueError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="invalid_ip")
+    return ip
 
 
 @router.get("", response_model=ClientList)
@@ -83,7 +95,7 @@ async def client_summary(client_ip: str, timeframe: str = Query(default="24h"), 
           AND source_ip = {ip:String}
         GROUP BY source_ip
         """,
-        {"since": tf.since, "until": tf.until, "ip": client_ip},
+        {"since": tf.since, "until": tf.until, "ip": _validate_ip(client_ip)},
     )
     if not row:
         return ClientSummary(client_ip=client_ip, branch_code="", flows=0, blocked=0, threats=0, bytes_up=0, bytes_down=0)
@@ -116,7 +128,7 @@ async def client_flows(
         ORDER BY event_time DESC
         LIMIT {limit:UInt32} OFFSET {offset:UInt32}
     """
-    rows = await ch.query(sql, {"since": tf.since, "until": tf.until, "ip": client_ip, "limit": page_size, "offset": offset})
+    rows = await ch.query(sql, {"since": tf.since, "until": tf.until, "ip": _validate_ip(client_ip), "limit": page_size, "offset": offset})
     items = [FlowEvent(**r) for r in rows]
     return EventsPage(
         timeframe=tf.timeframe, items=items,
@@ -152,7 +164,7 @@ async def client_threats(
         ORDER BY event_time DESC
         LIMIT {limit:UInt32} OFFSET {offset:UInt32}
     """
-    rows = await ch.query(sql, {"since": tf.since, "until": tf.until, "ip": client_ip, "limit": page_size, "offset": offset})
+    rows = await ch.query(sql, {"since": tf.since, "until": tf.until, "ip": _validate_ip(client_ip), "limit": page_size, "offset": offset})
     items = [ThreatEvent(**r) for r in rows]
     return EventsPage(
         timeframe=tf.timeframe, items=items,

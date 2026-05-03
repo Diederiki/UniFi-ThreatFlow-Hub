@@ -108,10 +108,12 @@ async def _persist_report(report: PruneReport) -> None:
 
 
 async def _prune_pg(db: AsyncSession) -> tuple[int, int]:
-    audit_sql = text(f"DELETE FROM audit_logs WHERE created_at < now() - INTERVAL '{AUDIT_LOG_RETENTION_DAYS} days'")
-    runs_sql = text(f"DELETE FROM collector_runs WHERE started_at < now() - INTERVAL '{COLLECTOR_RUNS_RETENTION_DAYS} days'")
-    audit_res = await db.execute(audit_sql)
-    runs_res = await db.execute(runs_sql)
+    """The retention values are module-level ints today, but bind-paramming
+    them anyway is defense-in-depth in case they ever become user-tunable."""
+    audit_sql = text("DELETE FROM audit_logs WHERE created_at < now() - make_interval(days => :days)")
+    runs_sql = text("DELETE FROM collector_runs WHERE started_at < now() - make_interval(days => :days)")
+    audit_res = await db.execute(audit_sql, {"days": int(AUDIT_LOG_RETENTION_DAYS)})
+    runs_res = await db.execute(runs_sql, {"days": int(COLLECTOR_RUNS_RETENTION_DAYS)})
     await db.commit()
     return (audit_res.rowcount or 0, runs_res.rowcount or 0)
 

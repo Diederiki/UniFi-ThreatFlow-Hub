@@ -48,21 +48,33 @@ class BatchWriter:
         self._flusher: asyncio.Task[None] | None = None
 
     async def submit_flows(self, rows: list[dict[str, Any]]) -> None:
+        # Swap-and-release: hold the lock only long enough to extract the batch
+        # we're about to insert. The slow CH insert + retries happen lock-free
+        # so dozens of concurrent collector branches don't serialize through us.
+        batch_to_insert: list[dict[str, Any]] | None = None
         async with self._lock:
             self._flows.extend(rows)
             if len(self._flows) >= settings.ch_batch_size:
-                await self._flush_flows_locked()
+                batch_to_insert, self._flows = self._flows, []
+        if batch_to_insert:
+            await self._insert_with_retry("raw_flow_events", batch_to_insert, FLOW_COLS)
 
     async def submit_threats(self, rows: list[dict[str, Any]]) -> None:
+        batch_to_insert: list[dict[str, Any]] | None = None
         async with self._lock:
             self._threats.extend(rows)
             if len(self._threats) >= settings.ch_batch_size:
-                await self._flush_threats_locked()
+                batch_to_insert, self._threats = self._threats, []
+        if batch_to_insert:
+            await self._insert_with_retry("raw_threat_events", batch_to_insert, THREAT_COLS)
 
     async def _flush_flows_locked(self) -> None:
+        """Used by the periodic flusher and shutdown — caller holds the lock."""
         if not self._flows:
             return
         batch, self._flows = self._flows, []
+        # Release-then-insert would be ideal here too, but the only callers are
+        # the timer task and shutdown, neither of which contend with submitters.
         await self._insert_with_retry("raw_flow_events", batch, FLOW_COLS)
 
     async def _flush_threats_locked(self) -> None:

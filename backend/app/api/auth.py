@@ -32,7 +32,9 @@ def _set_session_cookie(response: Response, token: str) -> None:
         value=token,
         max_age=settings.jwt_ttl_minutes * 60,
         httponly=True,
-        samesite="lax",
+        # strict so cross-site form posts can't carry the cookie. The SSO redirect
+        # uses its own short-lived state cookie (lax), so this doesn't break SSO.
+        samesite="strict",
         secure=settings.is_production,
         path="/",
     )
@@ -44,6 +46,10 @@ async def login(request: Request, payload: LoginRequest, response: Response, db:
     user = (await db.execute(select(User).where(User.email == payload.email.lower()))).scalar_one_or_none()
     if user is None or not user.enabled or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="invalid_credentials")
+    # Block password login for SSO-only users — admin-set passwords are the
+    # only way to unlock; otherwise force the SSO flow.
+    if user.auth_method == "sso":
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="sso_required")
 
     user.last_login_at = datetime.now(timezone.utc)
     await db.commit()

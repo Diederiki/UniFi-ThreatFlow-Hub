@@ -46,12 +46,14 @@ async def reclaim_estimate(
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ) -> ReclaimEstimate:
-    audit_n = (await db.execute(text(
-        f"SELECT count(*) FROM audit_logs WHERE created_at < now() - INTERVAL '{pruner.AUDIT_LOG_RETENTION_DAYS} days'"
-    ))).scalar_one()
-    runs_n = (await db.execute(text(
-        f"SELECT count(*) FROM collector_runs WHERE started_at < now() - INTERVAL '{pruner.COLLECTOR_RUNS_RETENTION_DAYS} days'"
-    ))).scalar_one()
+    audit_n = (await db.execute(
+        text("SELECT count(*) FROM audit_logs WHERE created_at < now() - make_interval(days => :days)"),
+        {"days": int(pruner.AUDIT_LOG_RETENTION_DAYS)},
+    )).scalar_one()
+    runs_n = (await db.execute(
+        text("SELECT count(*) FROM collector_runs WHERE started_at < now() - make_interval(days => :days)"),
+        {"days": int(pruner.COLLECTOR_RUNS_RETENTION_DAYS)},
+    )).scalar_one()
     failed = await ch.query_one("SELECT count() AS c FROM threatflow.failed_inserts")
     return ReclaimEstimate(
         audit_logs_rows_to_delete=int(audit_n or 0),

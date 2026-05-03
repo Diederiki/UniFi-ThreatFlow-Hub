@@ -68,6 +68,13 @@ async def sso_start(db: AsyncSession = Depends(get_db)) -> Response:
     return response
 
 
+def _err_with_cookie_clear(status_code: int, detail: str) -> HTTPException:
+    """Raise an HTTPException whose handler will also clear the SSO state cookie."""
+    exc = HTTPException(status_code, detail=detail)
+    exc.headers = {"Set-Cookie": f"{sso.STATE_COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax"}
+    return exc
+
+
 @router.get("/callback")
 async def sso_callback(
     request: Request,
@@ -82,7 +89,8 @@ async def sso_callback(
         claims = await sso.complete(db, code=code, state_from_query=state, state_cookie_value=state_cookie)
     except ValueError as e:
         log.warning("sso callback failed: %s", e)
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=f"sso_failed:{e}")
+        # Clear the now-burnt state cookie even on failure so it can't be replayed.
+        raise _err_with_cookie_clear(status.HTTP_401_UNAUTHORIZED, f"sso_failed:{e}")
 
     # Microsoft may put email in `email`, `preferred_username`, or `upn`
     email = (claims.get("email") or claims.get("preferred_username") or claims.get("upn") or "").lower().strip()
@@ -91,8 +99,15 @@ async def sso_callback(
     if not email or not sub:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="sso_missing_claims")
 
-    # Match by sso_subject first (stable), then by email (in case it's a returning user)
-    user = await users_svc.get_by_sso_subject(db, sub) or await users_svc.get_by_email(db, email)
+    # Stable match by `sub` first. Fall back to email ONLY when Microsoft says
+    # the email is verified — otherwise an attacker controlling any tenant
+    # could register an unverified `bob@amspecgroup.com` and take over a
+    # local account.
+    user = await users_svc.get_by_sso_subject(db, sub)
+    if user is None:
+        email_verified = bool(claims.get("email_verified", False)) or "verified_primary_email" in (claims.get("xms_edov") or [])
+        if email_verified:
+            user = await users_svc.get_by_email(db, email)
 
     cfg = await sso.load_config(db)
     if user is None:

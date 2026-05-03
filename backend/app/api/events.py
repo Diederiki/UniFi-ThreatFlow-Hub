@@ -122,7 +122,7 @@ async def list_threats(
 @router.get("/threats.csv")
 async def export_threats_csv(
     timeframe: str = Query(default="24h"),
-    branch_id: str | None = Query(default=None),
+    branch_id: UUID | None = Query(default=None),
     severity: str | None = Query(default=None),
     signature: str | None = Query(default=None),
     source_ip: str | None = Query(default=None),
@@ -168,7 +168,9 @@ async def export_threats_csv(
 
 
 @router.get("/threats/{event_id}", response_model=ThreatEvent)
-async def get_threat(event_id: str, _user: User = Depends(get_current_user)):
+async def get_threat(event_id: UUID, _user: User = Depends(get_current_user)):
+    """UUID coercion at the route layer prevents arbitrary-string CH probes
+    that would force a full-table scan. Time bound caps the partition scan."""
     sql = """
         SELECT
             toString(event_id) AS event_id, event_hash,
@@ -180,11 +182,12 @@ async def get_threat(event_id: str, _user: User = Depends(get_current_user)):
             0 AS bytes_up, 0 AS bytes_down,
             '' AS application, '' AS application_category
         FROM threatflow.raw_threat_events
-        WHERE toString(event_id) = {eid:String}
+        WHERE event_id = {eid:UUID}
+          AND event_time > now() - INTERVAL 90 DAY
         ORDER BY ingest_time DESC
         LIMIT 1
     """
-    row = await ch.query_one(sql, {"eid": event_id})
+    row = await ch.query_one(sql, {"eid": str(event_id)})
     if not row:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="threat_not_found")
     return ThreatEvent(**row)

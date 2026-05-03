@@ -79,7 +79,17 @@ async def _load_raw(db: AsyncSession) -> dict[str, Any]:
     return dict(row.value) if (row and row.value) else {}
 
 
+_TENANT_BLACKLIST = {"common", "organizations", "consumers"}
+
+
 async def save_config(db: AsyncSession, payload: SsoConfigUpdate) -> SsoConfig:
+    tenant = payload.tenant_id.strip().lower()
+    if payload.enabled and tenant in _TENANT_BLACKLIST:
+        # Multi-tenant Entra apps with `common` accept ANY Microsoft tenant —
+        # iss validation collapses to "any login.microsoftonline.com". Pin to
+        # the specific tenant GUID instead.
+        from fastapi import HTTPException, status as st
+        raise HTTPException(st.HTTP_400_BAD_REQUEST, detail="tenant_id_must_be_specific_guid_not_common")
     existing = await _load_raw(db)
     new: dict[str, Any] = {
         "enabled": payload.enabled,

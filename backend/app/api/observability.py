@@ -18,7 +18,7 @@ from typing import Any
 import psutil
 from fastapi import APIRouter, Depends
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_role
 from app.models.user import User
 
 router = APIRouter(prefix="/observability", tags=["observability"])
@@ -78,8 +78,10 @@ async def host_metrics(_user: User = Depends(get_current_user)) -> dict[str, Any
 
 
 @router.get("/host/processes")
-async def host_processes(_user: User = Depends(get_current_user), limit: int = 10) -> dict[str, Any]:
-    """Top processes by RSS — capped to `limit` so we never return more than ~30 rows."""
+async def host_processes(_user: User = Depends(require_role("admin")), limit: int = 10) -> dict[str, Any]:
+    """Top processes by RSS — admin-only because process names can leak the
+    presence of unrelated services on the shared VPS (mysql, secure-share,
+    pdf-compressor, etc.)."""
     procs = []
     for p in psutil.process_iter(attrs=["pid", "name", "memory_info", "cpu_percent"]):
         try:
