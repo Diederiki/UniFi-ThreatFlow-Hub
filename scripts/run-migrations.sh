@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# Run Alembic migrations inside the backend container.
+# Apply Postgres (Alembic) + ClickHouse (idempotent CREATE … IF NOT EXISTS) migrations.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+echo "[migrations] postgres (alembic) …"
 docker compose exec -T backend alembic upgrade head
-echo "[migrations] alembic upgrade head — done"
+
+echo "[migrations] clickhouse (idempotent schema) …"
+docker compose exec -T backend python -m app.cli.migrate_clickhouse
+
+echo "[migrations] done"

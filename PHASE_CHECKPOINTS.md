@@ -37,7 +37,7 @@ ClickHouse / Postgres / Redis stay inside the docker network only (`threatflow_n
 | Phase | Title | Status | Commit | Notes |
 |---|---|---|---|---|
 | 1 | Monorepo + Docker stack + Postgres + ClickHouse + Redis + FastAPI + Next.js + auth + dark layout | ✅ code-complete | `1019952` | runtime verification pending first VPS deploy |
-| 2 | PG migrations + branch CRUD + credential encryption + branch UI + test connection stub | ⬜ pending |  |  |
+| 2 | PG migrations + branch CRUD + credential encryption + branch UI + test connection stub | ✅ done | `566e4d9` | E2E verified on VPS — Fernet ciphertext confirmed in DB, 0 plaintext leaks anywhere |
 | 3 | ClickHouse schema + raw event tables + rollups + materialized views + storage health API | ⬜ pending |  |  |
 | 4 | Collector service + UniFi adapters + traffic-flows + IPS fallback + mock collector + 30s scheduler + dedupe + batch insert | ⬜ pending |  |  |
 | 5 | Dashboard APIs + overview/threats/blocked/top-visited/branch-detail/collector-health pages | ⬜ pending |  |  |
@@ -68,11 +68,14 @@ ClickHouse / Postgres / Redis stay inside the docker network only (`threatflow_n
   - [x] **Browser sign-in at https://threatflow.amspec.group LIVE** — DNS resolved, `certbot --nginx` succeeded, LE cert good till 2026-08-01, `/login` + `/api/health` both 200 over HTTPS, all 5 other VPS sites unaffected (compress 307, share 307, servicedesk 200, expense 200, stock-report 200)
 
 ### Phase 2
-- [ ] Alembic migrations for all blueprint tables: `users`, `roles`, `branches`, `branch_credentials`, `collector_status`, `collector_runs`, `app_settings`, `audit_logs`
-- [ ] Fernet encryption for branch creds (key from `.env`, never logged)
-- [ ] Branches CRUD API + RBAC + audit log writes
-- [ ] Frontend `/branches` page with add/edit/delete/enable/disable/test-connection buttons
-- [ ] Test connection stub returns mock OK in mock mode
+- [x] Alembic `20260503_0002` adds `branches`, `branch_credentials`, `collector_status`, `collector_runs` (+ pgcrypto extension)
+- [x] Fernet at-rest encryption (`app.utils.encryption`); confirmed via plaintext-marker probe — 0 leaks in DB or audit log
+- [x] `/api/branches` CRUD + enable/disable/test-connection/discover-sites with role gates (admin / operator / viewer)
+- [x] Audit log writes on every mutation, visible via `audit_logs` table
+- [x] Frontend `/branches` list with status badges + inline test/enable/disable/delete
+- [x] Frontend `/branches/new` and `/branches/[id]` sharing one `BranchForm` with all blueprint-required buttons
+- [x] Mock test-connection returns realistic endpoint + UniFi-OS version + sites
+- [x] Architecture insight: blueprint assumes per-branch local controller URLs, but user actually accesses everything via the `unifi.ui.com` cloud portal — Phase 4 will ship two adapters (`LocalControllerAdapter` + `UnifiCloudAdapter`)
 
 ### Phase 3
 - [ ] ClickHouse schema for `raw_flow_events`, `raw_threat_events`, `rollup_1m`, `rollup_5m`, `rollup_15m`, `rollup_1h`, `rollup_1d`

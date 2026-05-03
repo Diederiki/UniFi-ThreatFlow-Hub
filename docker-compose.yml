@@ -104,6 +104,10 @@ services:
       BACKEND_HOST: 0.0.0.0
       BACKEND_PORT: 8000
       BACKEND_WORKERS: ${BACKEND_WORKERS}
+    volumes:
+      # Read-only mount so app.cli.migrate_clickhouse can re-apply the schema
+      # against an already-initialized ClickHouse cluster.
+      - ./infra/clickhouse/init:/app/clickhouse_schema:ro
     ports:
       - "127.0.0.1:${HOST_BACKEND_PORT}:8000"
     healthcheck:
