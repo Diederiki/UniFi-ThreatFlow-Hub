@@ -38,7 +38,7 @@ ClickHouse / Postgres / Redis stay inside the docker network only (`threatflow_n
 |---|---|---|---|---|
 | 1 | Monorepo + Docker stack + Postgres + ClickHouse + Redis + FastAPI + Next.js + auth + dark layout | ✅ code-complete | `1019952` | runtime verification pending first VPS deploy |
 | 2 | PG migrations + branch CRUD + credential encryption + branch UI + test connection stub | ✅ done | `566e4d9` | E2E verified on VPS — Fernet ciphertext confirmed in DB, 0 plaintext leaks anywhere |
-| 3 | ClickHouse schema + raw event tables + rollups + materialized views + storage health API | ⬜ pending |  |  |
+| 3 | ClickHouse schema + raw event tables + rollups + materialized views + storage health API | ✅ done | `f16bd16` | 13 CH tables/MVs live, MV propagation verified, 7 TTLs read correctly |
 | 4 | Collector service + UniFi adapters + traffic-flows + IPS fallback + mock collector + 30s scheduler + dedupe + batch insert | ⬜ pending |  |  |
 | 5 | Dashboard APIs + overview/threats/blocked/top-visited/branch-detail/collector-health pages | ⬜ pending |  |  |
 | 6 | Suspicion scoring + scoring settings + top suspicious lists + trend charts | ⬜ pending |  |  |
@@ -78,11 +78,14 @@ ClickHouse / Postgres / Redis stay inside the docker network only (`threatflow_n
 - [x] Architecture insight: blueprint assumes per-branch local controller URLs, but user actually accesses everything via the `unifi.ui.com` cloud portal — Phase 4 will ship two adapters (`LocalControllerAdapter` + `UnifiCloudAdapter`)
 
 ### Phase 3
-- [ ] ClickHouse schema for `raw_flow_events`, `raw_threat_events`, `rollup_1m`, `rollup_5m`, `rollup_15m`, `rollup_1h`, `rollup_1d`
-- [ ] MergeTree, partitioning, ORDER BY tuned per blueprint
-- [ ] TTL policies wired (configurable via `.env`)
-- [ ] Materialized views OR scheduled aggregation jobs populate rollups
-- [ ] `/api/storage/health` returns row counts, GB/day, retention, oldest event
+- [x] ClickHouse schema for all 7 blueprint tables + 5 MVs + 1 dead-letter table
+- [x] ReplacingMergeTree(ingest_time) keyed on event_hash for natural dedup; partition by month; ORDER BY (branch_id, event_time, event_hash)
+- [x] AggregatingMergeTree rollups storing sumState counters + uniqState(client/dest) + topKState(20)(clients/dests/domains/apps/categories/countries)
+- [x] 5 MVs populating rollups directly from raw (no MV chaining → independently rebuildable)
+- [x] TTLs default 90/180/180/365/365/730/1825 (matches blueprint), runtime-tunable via PUT /api/storage/retention
+- [x] `/api/storage/health` returns rows, on-disk + uncompressed bytes, compression ratio, parts, oldest/newest, failed_inserts_30d, rollup_freshness, /day estimate
+- [x] Frontend `/storage-health` page with auto-refresh 30s
+- [x] **Verified**: 100 fake inserts → all 5 rollups auto-populated via MVs, 37× compression on rollup_1m
 
 ### Phase 4
 - [ ] `BaseUniFiCollector` ABC + `UniFiNetworkV2TrafficFlowsCollector` + `LegacyUniFiIpsEventCollector` + mock collector
