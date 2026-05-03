@@ -50,10 +50,61 @@ class PruneReport:
 
 
 _last_report: PruneReport | None = None
+LAST_REPORT_KEY = "pruner_last_report"
 
 
 def last_report() -> PruneReport | None:
+    """Read the last report from the in-process cache. Multi-worker callers
+    should prefer last_report_persisted() which round-trips through PG."""
     return _last_report
+
+
+async def last_report_persisted() -> PruneReport | None:
+    """Cross-worker access — reads the most recent report from app_settings."""
+    from sqlalchemy import select
+    from app.models.app_setting import AppSetting
+    async with SessionLocal() as db:
+        row = (await db.execute(select(AppSetting).where(AppSetting.key == LAST_REPORT_KEY))).scalar_one_or_none()
+        if not row or not row.value:
+            return None
+        v = row.value
+        return PruneReport(
+            started_at=datetime.fromisoformat(v["started_at"]),
+            finished_at=datetime.fromisoformat(v["finished_at"]),
+            audit_logs_deleted=int(v.get("audit_logs_deleted", 0)),
+            collector_runs_deleted=int(v.get("collector_runs_deleted", 0)),
+            rollups_optimized=list(v.get("rollups_optimized", [])),
+            disk_percent=float(v.get("disk_percent", 0)),
+            disk_free_bytes=int(v.get("disk_free_bytes", 0)),
+            watchdog_fired=bool(v.get("watchdog_fired", False)),
+            actions_taken=list(v.get("actions_taken", [])),
+            errors=list(v.get("errors", [])),
+        )
+
+
+async def _persist_report(report: PruneReport) -> None:
+    """Upsert the latest report into app_settings so other workers see it."""
+    from sqlalchemy import select
+    from app.models.app_setting import AppSetting
+    payload = {
+        "started_at": report.started_at.isoformat(),
+        "finished_at": report.finished_at.isoformat(),
+        "audit_logs_deleted": report.audit_logs_deleted,
+        "collector_runs_deleted": report.collector_runs_deleted,
+        "rollups_optimized": report.rollups_optimized,
+        "disk_percent": report.disk_percent,
+        "disk_free_bytes": report.disk_free_bytes,
+        "watchdog_fired": report.watchdog_fired,
+        "actions_taken": report.actions_taken,
+        "errors": report.errors,
+    }
+    async with SessionLocal() as db:
+        existing = (await db.execute(select(AppSetting).where(AppSetting.key == LAST_REPORT_KEY))).scalar_one_or_none()
+        if existing:
+            existing.value = payload
+        else:
+            db.add(AppSetting(key=LAST_REPORT_KEY, value=payload))
+        await db.commit()
 
 
 async def _prune_pg(db: AsyncSession) -> tuple[int, int]:
@@ -155,6 +206,10 @@ async def run_once() -> PruneReport:
     )
     global _last_report
     _last_report = report
+    try:
+        await _persist_report(report)
+    except Exception as e:  # noqa: BLE001
+        log.warning("could not persist pruner report: %s", e)
     log.info("pruner done: audit=%d runs=%d optimized=%d disk=%.1f%% watchdog=%s",
              audit_n, runs_n, len(optimized), disk_percent, watchdog_fired)
     return report
