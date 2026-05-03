@@ -11,10 +11,12 @@ class TokenError(Exception):
 
 
 def create_access_token(subject: str, extra: dict[str, Any] | None = None) -> str:
+    """JWT iat is float (seconds with µs) so token-revocation comparisons
+    against `users.min_token_iat` don't suffer from same-second collisions."""
     now = datetime.now(timezone.utc)
     payload: dict[str, Any] = {
         "sub": subject,
-        "iat": int(now.timestamp()),
+        "iat": now.timestamp(),  # float; PyJWT accepts NumericDate float per RFC 7519 § 2
         "exp": int((now + timedelta(minutes=settings.jwt_ttl_minutes)).timestamp()),
     }
     if extra:

@@ -101,7 +101,7 @@ async def reset_password(
     if not u:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="user_not_found")
     await svc.admin_set_password(db, u, payload.new_password)
-    u.min_token_iat = datetime.now(timezone.utc) + timedelta(seconds=1)
+    u.min_token_iat = datetime.now(timezone.utc)
     await db.commit()
     await log_action(db, actor=actor, action="user.password_reset", entity_type="user", entity_id=str(u.id),
                      metadata={"email": u.email})

@@ -36,9 +36,11 @@ async def get_current_user(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="user_disabled")
 
     # Token revocation: reject any JWT issued before user.min_token_iat.
+    # Both sides are float seconds (µs precision) so same-second new logins
+    # after a revocation get a fractionally-larger iat and pass the strict <.
     if user.min_token_iat is not None:
         iat = payload.get("iat")
-        if iat is not None and int(iat) < int(user.min_token_iat.timestamp()):
+        if iat is not None and float(iat) < user.min_token_iat.timestamp():
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="token_revoked")
     return user
 

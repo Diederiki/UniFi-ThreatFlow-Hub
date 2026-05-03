@@ -7,10 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def _revoke_now() -> datetime:
-    """Stamp 1s in the future so any token with iat <= current-second
-    (whole-second resolution) is rejected; new tokens issued strictly later
-    pass the check."""
-    return datetime.now(timezone.utc) + timedelta(seconds=1)
+    """Stamp the revocation cutoff at *now*. Because iat is float-seconds, any
+    token issued at or before this instant is rejected, and a re-login that
+    happens microseconds later gets a strictly-larger iat and passes."""
+    return datetime.now(timezone.utc)
 
 from app.auth.dependencies import SESSION_COOKIE, get_current_user
 from app.auth.jwt_tokens import create_access_token
