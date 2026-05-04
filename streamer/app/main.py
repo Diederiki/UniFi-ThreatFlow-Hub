@@ -110,13 +110,16 @@ async def _open_tabs(ctx: BrowserContext) -> list[BranchTab]:
         streamable = streamable[: settings.max_tabs]
     log.info("opening %d branch tab(s)", len(streamable))
     tabs: list[BranchTab] = []
+    # Stagger MUCH bigger than naive — Ubiquiti rate-limits the bootstrap
+    # surface (cloudaccess.svc, ues.svc, etc) per-IP and 55 simultaneous
+    # tabs hit 429s on /api/v1/info/subscriptions. 6s stagger spreads
+    # the bootstrap traffic over ~5.5 minutes which empirically fits.
+    stagger = float(os.environ.get("STREAMER_TAB_STAGGER_SECONDS", "6.0"))
     for b in streamable:
         t = BranchTab(ctx, b)
         await t.open()
         tabs.append(t)
-        # Stagger opens so 55 simultaneous WebRTC handshakes don't drown
-        # the network or the Cloudflare TURN service.
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(stagger)
     return tabs
 
 
