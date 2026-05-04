@@ -45,6 +45,15 @@ class BranchTab:
 
     async def open(self) -> None:
         self.page = await self.ctx.new_page()
+        # Capture page-side errors so we can see what's blocking the WebRTC
+        # / MQTT handshake. Limited to a few lines per tab to avoid log spam.
+        self._page_errors: list[str] = []
+        self.page.on("pageerror", lambda e: self._page_errors.append(f"pageerror: {str(e)[:200]}"))
+        self.page.on("console", lambda m: (
+            self._page_errors.append(f"console.{m.type}: {m.text[:200]}")
+            if m.type in ("error", "warning") and len(self._page_errors) < 30
+            else None
+        ))
         cdp = await self.ctx.new_cdp_session(self.page)
         await cdp.send("Page.enable")
         await cdp.send("Page.addScriptToEvaluateOnNewDocument", {"source": SPY_SOURCE})
@@ -54,6 +63,9 @@ class BranchTab:
             await self.page.goto(url, wait_until="domcontentloaded", timeout=20_000)
         except Exception as e:
             log.warning("[%s] navigate warning: %s", self.branch.branch_code, e)
+
+    def page_errors(self) -> list[str]:
+        return list(getattr(self, "_page_errors", []))[:20]
 
     async def diagnose(self) -> dict:
         """One-time post-navigation diagnostic. Returns observable state

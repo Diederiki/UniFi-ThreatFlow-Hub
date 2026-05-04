@@ -202,6 +202,12 @@ async def main_async() -> int:
                 await asyncio.sleep(20)
                 diag = await tabs[0].diagnose()
                 log.info("first-tab diagnostic: %s", diag)
+                errs = tabs[0].page_errors()
+                if errs:
+                    for e in errs[:15]:
+                        log.info("first-tab page error: %s", e)
+                else:
+                    log.info("first-tab page errors: none")
             await _supervisor_loop(tabs, stop)
         finally:
             try: await ctx.close()
