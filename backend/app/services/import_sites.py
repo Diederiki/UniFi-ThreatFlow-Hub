@@ -51,8 +51,16 @@ class ImportSummary:
     errors: list[str]
 
 
+def _strip_host_suffix(host_id: str | None) -> str | None:
+    """/ea/sites returns hostId with a ':NNNNN' suffix that /ea/hosts strips
+    on the `id` field. Normalize so the lookup tables match."""
+    if not host_id:
+        return None
+    return host_id.split(":", 1)[0]
+
+
 async def _fetch_sites(api_key: str) -> list[ImportItem]:
-    """Hit /ea/hosts AND /ea/sites and merge so each site gets a name."""
+    """Hit /ea/hosts AND /ea/sites and merge so each site gets a real name."""
     headers = {"X-API-KEY": api_key, "Accept": "application/json"}
     items: list[ImportItem] = []
 
@@ -68,13 +76,20 @@ async def _fetch_sites(api_key: str) -> list[ImportItem]:
                 for h in (hosts_r.json().get("data") or []):
                     if not isinstance(h, dict):
                         continue
-                    hid = h.get("id") or h.get("hostId")
+                    # /ea/hosts.id is the canonical form WITHOUT :NNNN suffix —
+                    # /ea/sites.hostId carries that suffix, so we'll strip there.
+                    hid = _strip_host_suffix(h.get("id") or h.get("hostId"))
                     rs = h.get("reportedState") or {}
-                    name = (h.get("name")
-                            or (rs.get("name") if isinstance(rs, dict) else None)
-                            or (rs.get("hostname") if isinstance(rs, dict) else None))
+                    name = None
+                    if isinstance(rs, dict):
+                        name = rs.get("name") or rs.get("hostname")
+                        if not name:
+                            hw = rs.get("hardware") or {}
+                            if isinstance(hw, dict):
+                                name = hw.get("name") or hw.get("shortname")
+                    name = name or h.get("name")
                     if hid and name:
-                        hosts_by_id[str(hid)] = str(name)
+                        hosts_by_id[hid] = str(name).strip()
         except Exception as e:  # noqa: BLE001
             log.warning("hosts fetch failed (continuing with site-only names): %s", e)
 
@@ -84,21 +99,43 @@ async def _fetch_sites(api_key: str) -> list[ImportItem]:
             site_id = s.get("siteId") or s.get("id")
             if not site_id:
                 continue
-            host_id = s.get("hostId") or (s.get("host") or {}).get("id")
-            host_name = hosts_by_id.get(str(host_id)) if host_id else None
-            # Site name preference: meta.name → name → hostName → host_name → siteId
+            raw_host_id = s.get("hostId") or (s.get("host") or {}).get("id")
+            host_id = _strip_host_suffix(raw_host_id) if raw_host_id else None
+            host_name = hosts_by_id.get(host_id) if host_id else None
+
             meta = s.get("meta") or {}
-            name = (
-                (meta.get("name") if isinstance(meta, dict) else None)
-                or s.get("name")
-                or s.get("internalReference")
-                or host_name
-                or str(site_id)
-            )
+            stats = s.get("statistics") or {}
+            gateway = stats.get("gateway") if isinstance(stats, dict) else {}
+            isp = stats.get("ispInfo") if isinstance(stats, dict) else {}
+
+            site_internal = meta.get("name") if isinstance(meta, dict) else None  # usually "default"
+            site_desc = meta.get("desc") if isinstance(meta, dict) else None
+            short = (gateway.get("shortname") if isinstance(gateway, dict) else None)
+            isp_org = (isp.get("organization") if isinstance(isp, dict) else None)
+            mac = meta.get("gatewayMac") if isinstance(meta, dict) else None
+
+            # Name preference for the branch:
+            #   1. Host's reported name (e.g. "AmSpec-Dordrecht")
+            #   2. If multiple sites per host: append site internal ref ("HQ - default")
+            #   3. Site description if non-default
+            #   4. Gateway shortname (a UI-assigned 6-letter code like "UDRULT")
+            #   5. ISP org as a hint of location
+            #   6. Last 6 chars of siteId — guaranteed unique fallback
+            name = host_name
+            if not name:
+                if site_desc and site_desc.lower() not in ("default", ""):
+                    name = site_desc
+                elif short:
+                    name = f"console {short}"
+                elif isp_org:
+                    name = f"site at {isp_org}"
+                else:
+                    name = f"site {str(site_id)[-6:]}"
+
             items.append(ImportItem(
                 name=str(name).strip(),
                 site_id=str(site_id),
-                host_id=str(host_id) if host_id else None,
+                host_id=host_id,
                 host_name=host_name,
             ))
     return items
