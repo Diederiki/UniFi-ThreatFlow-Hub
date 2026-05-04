@@ -81,6 +81,7 @@ class BranchTab:
                 "any_count: (window.__streamer&&window.__streamer.any_count)||0,"
                 "buffered: (window.__streamer&&window.__streamer.dc.length)||0,"
                 "ws_opens: (window.__streamer&&window.__streamer.ws_opens)||[],"
+                "pc_states: (window.__streamer&&window.__streamer.pc_states)||[],"
                 "rtcpc: typeof RTCPeerConnection,"
                 "ua: navigator.userAgent.slice(0,140),"
                 "webdriver: navigator.webdriver"

@@ -95,14 +95,43 @@ SPY_SOURCE = r"""
     dc.addEventListener('message', (ev) => pushFrame(dc.label, ev.data));
   }
 
+  // Stamp every PeerConnection with a state log so we can see ICE/DTLS
+  // negotiation outcome from Python.
+  window.__streamer.pc_states = [];
+  function watchPC(pc) {
+    if (pc.__streamerWatched) return;
+    pc.__streamerWatched = true;
+    const idx = window.__streamer.pc_states.length;
+    window.__streamer.pc_states.push({
+      ts: Date.now(), transitions: [],
+      ice: pc.iceConnectionState, conn: pc.connectionState, sig: pc.signalingState,
+    });
+    const tx = (label) => { try { window.__streamer.pc_states[idx].transitions.push({
+      t: Date.now() - window.__streamer.pc_states[idx].ts, label,
+      ice: pc.iceConnectionState, conn: pc.connectionState, sig: pc.signalingState,
+    }); } catch(_){} };
+    pc.addEventListener('iceconnectionstatechange', () => tx('ice'));
+    pc.addEventListener('connectionstatechange',    () => tx('conn'));
+    pc.addEventListener('signalingstatechange',     () => tx('sig'));
+    pc.addEventListener('icegatheringstatechange',  () => tx('gather'));
+    pc.addEventListener('icecandidateerror',        (ev) => {
+      try { window.__streamer.pc_states[idx].transitions.push({
+        t: Date.now() - window.__streamer.pc_states[idx].ts, label: 'ice-err',
+        code: ev.errorCode, text: String(ev.errorText||'').slice(0,80),
+      }); } catch(_){}
+    });
+  }
+
   const oCreate = proto.createDataChannel;
   proto.createDataChannel = function(label, init) {
+    watchPC(this);
     const dc = oCreate.call(this, label, init);
     hookDC(dc);
     return dc;
   };
   const oSetRemote = proto.setRemoteDescription;
   proto.setRemoteDescription = function(desc) {
+    watchPC(this);
     const self = this;
     self.addEventListener('datachannel', (ev) => hookDC(ev.channel));
     return oSetRemote.apply(this, arguments);
