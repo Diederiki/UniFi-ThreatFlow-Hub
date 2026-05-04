@@ -17,6 +17,7 @@ const NAV: NavItem[] = [
   { section: "Inventory",  href: "/destinations",     label: "Destinations" },
   { section: "Inventory",  href: "/categories",       label: "Categories" },
   { section: "Operations", href: "/operations",       label: "Observability" },
+  { section: "Operations", href: "/ipfix-sources",    label: "IPFIX Sources" },
   { section: "Operations", href: "/collector-health", label: "Collector Health" },
   { section: "Operations", href: "/storage-health",   label: "Storage Health" },
   { section: "Admin",      href: "/settings",         label: "Settings" },

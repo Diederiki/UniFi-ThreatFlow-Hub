@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.api import (
     auth, blocked, branches, clients, cloudproxy, collectors, dashboard, events,
-    health, observability, operations, settings, sso, storage, suspicion, top, users,
+    health, ipfix, observability, operations, settings, sso, storage, suspicion, top, users,
 )
 
 api_router = APIRouter(prefix="/api")
@@ -23,3 +23,4 @@ api_router.include_router(operations.router)
 api_router.include_router(blocked.router)
 api_router.include_router(settings.router)
 api_router.include_router(cloudproxy.router)
+api_router.include_router(ipfix.router)
