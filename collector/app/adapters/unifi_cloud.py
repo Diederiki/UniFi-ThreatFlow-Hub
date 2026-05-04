@@ -33,10 +33,8 @@ class UnifiCloudAdapter(BaseUniFiCollector):
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(
-                timeout=httpx.Timeout(settings.timeout_seconds),
-                follow_redirects=True,
-            )
+            from app.unifi_http import make_client
+            self._client = make_client(timeout=settings.timeout_seconds)
         return self._client
 
     async def _login(self, client: httpx.AsyncClient) -> None:

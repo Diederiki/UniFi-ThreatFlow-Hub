@@ -28,8 +28,9 @@ class UniFiClientInventoryCollector(BaseUniFiCollector):
     async def collect(self) -> CollectResult:
         # Inventory is enrichment, not events — return empty event lists.
         # The structure is in place so a real implementation can replace this.
+        # Always read-only, like every other UniFi call in the collector.
         endpoint = self.PATH.format(site_id=self.site_id)
-        log.debug("client inventory probe %s (parser TBD)", endpoint)
+        log.debug("client inventory probe %s (parser TBD, read-only GET)", endpoint)
         return CollectResult(endpoint_used=endpoint)
 
     async def close(self) -> None:
@@ -46,8 +47,9 @@ class UniFiDeviceInventoryCollector(BaseUniFiCollector):
         self._client: httpx.AsyncClient | None = None
 
     async def collect(self) -> CollectResult:
+        # Read-only GET only.
         endpoint = self.PATH.format(site_id=self.site_id)
-        log.debug("device inventory probe %s (parser TBD)", endpoint)
+        log.debug("device inventory probe %s (parser TBD, read-only GET)", endpoint)
         return CollectResult(endpoint_used=endpoint)
 
     async def close(self) -> None:

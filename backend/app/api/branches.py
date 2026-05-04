@@ -14,9 +14,11 @@ from app.schemas.branch import (
     BranchUpdate,
     TestConnectionResult,
 )
+from app.schemas.import_sites import ImportRequest, ImportSummaryOut
 from app.services import branches as svc
 from app.services import unifi_test
 from app.services.audit import log_action
+from app.services.import_sites import import_all_sites
 
 router = APIRouter(prefix="/branches", tags=["branches"])
 
@@ -45,6 +47,31 @@ async def list_branches(
     if status:
         items = [b for b in items if (b.status and b.status.status == status)]
     return BranchListOut(items=items, total=len(items))
+
+
+@router.post("/import-from-cloud", response_model=ImportSummaryOut, status_code=status.HTTP_200_OK)
+async def import_from_cloud(
+    payload: ImportRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_role("admin", "operator")),
+):
+    """Bulk-import every Site Manager site as a Threatflow branch.
+
+    Idempotent: branches that already exist (matched by generated branch_code)
+    are skipped so re-running is safe. The API key is encrypted with Fernet
+    and reused for every created branch — paste once, get one branch per
+    site automatically.
+    """
+    summary = await import_all_sites(db, payload.api_key)
+    await log_action(
+        db, actor=actor, action="branch.import_from_cloud", entity_type="branch",
+        metadata={
+            "total_seen": summary.total_seen, "created": summary.created,
+            "skipped_existing": summary.skipped_existing, "failed": summary.failed,
+        },
+    )
+    await db.commit()
+    return ImportSummaryOut(**summary.__dict__)
 
 
 @router.post("", response_model=BranchOut, status_code=status.HTTP_201_CREATED)

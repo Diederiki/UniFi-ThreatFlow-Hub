@@ -7,6 +7,7 @@ import { useToast } from "@/components/Toast";
 import { api, ApiError } from "@/lib/api";
 import { AdvancedFilters, type FilterValues } from "@/components/AdvancedFilters";
 import { BRANCH_FILTERS } from "@/lib/filterDefs";
+import { ImportFromCloudDialog } from "@/components/branches/ImportFromCloudDialog";
 
 function statusBadge(b: Branch): { label: string; cls: string } {
   if (!b.enabled) return { label: "disabled", cls: "bg-panel2 text-muted border-border" };
@@ -22,6 +23,7 @@ export default function BranchesPage() {
   const [items, setItems] = useState<Branch[] | null>(null);
   const [filters, setFilters] = useState<FilterValues>({});
   const [error, setError] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
   async function reload() {
     try {
@@ -77,8 +79,18 @@ export default function BranchesPage() {
           <h1 className="text-lg font-semibold">Branches</h1>
           <p className="text-xs text-muted">{items === null ? "Loading…" : `${items.length} configured`}</p>
         </div>
-        <Link href="/branches/new" className="btn btn-primary">+ Add branch</Link>
+        <div className="flex gap-2">
+          <button onClick={() => setShowImport(true)} className="btn">Import from Site Manager</button>
+          <Link href="/branches/new" className="btn btn-primary">+ Add branch</Link>
+        </div>
       </div>
+
+      {showImport && (
+        <ImportFromCloudDialog
+          onClose={() => setShowImport(false)}
+          onImported={() => reload()}
+        />
+      )}
 
       <AdvancedFilters defs={BRANCH_FILTERS} value={filters} onChange={setFilters} storageKey="threatflow.filters.branches" />
 

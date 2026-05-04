@@ -28,11 +28,13 @@ class LocalControllerAdapter(BaseUniFiCollector):
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(
+            # Read-only event hook — refuses non-GET (except login) to prevent
+            # any accidental modification of the user's UniFi controller.
+            from app.unifi_http import make_client
+            self._client = make_client(
                 base_url=self.controller_url.rstrip("/"),
                 verify=self.ssl_verify,
-                timeout=httpx.Timeout(settings.timeout_seconds),
-                follow_redirects=True,
+                timeout=settings.timeout_seconds,
             )
         return self._client
 

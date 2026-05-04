@@ -24,6 +24,7 @@ import httpx
 
 from app.models.branch import Branch
 from app.schemas.branch import TestConnectionResult
+from app.services.unifi_http import make_client
 from app.utils.encryption import decrypt
 
 log = logging.getLogger("unifi_test")
@@ -87,7 +88,7 @@ async def _cloud_probe(api_key: str, started: float) -> TestConnectionResult:
     hosts_endpoint = f"{SITE_MANAGER_BASE}/ea/hosts"
     sites_endpoint = f"{SITE_MANAGER_BASE}/ea/sites"
     try:
-        async with httpx.AsyncClient(timeout=12) as client:
+        async with make_client(timeout=12) as client:
             hosts_resp, sites_resp = await asyncio.gather(
                 client.get(hosts_endpoint, headers=headers),
                 client.get(sites_endpoint, headers=headers),
@@ -151,7 +152,7 @@ async def _local_api_key_probe(controller_url: str, api_key: str, ssl_verify: bo
     base = controller_url.rstrip("/")
     endpoint = f"{base}/proxy/network/integration/v1/sites"
     try:
-        async with httpx.AsyncClient(timeout=10, verify=ssl_verify, follow_redirects=True) as client:
+        async with make_client(timeout=10, verify=ssl_verify) as client:
             r = await client.get(endpoint, headers={"X-API-KEY": api_key, "Accept": "application/json"})
     except httpx.HTTPError as e:
         return TestConnectionResult(ok=False, endpoint_used=endpoint, duration_ms=_ms(started),
@@ -192,7 +193,7 @@ async def _local_api_key_probe(controller_url: str, api_key: str, ssl_verify: bo
 async def _local_login_probe(controller_url: str, username: str, password: str, ssl_verify: bool, started: float) -> TestConnectionResult:
     base = controller_url.rstrip("/")
     last_err: str = ""
-    async with httpx.AsyncClient(timeout=10, verify=ssl_verify, follow_redirects=True) as client:
+    async with make_client(timeout=10, verify=ssl_verify) as client:
         # Try newer UniFi OS path first, then legacy Network app
         for login_path in ("/api/auth/login", "/api/login"):
             url = f"{base}{login_path}"
