@@ -55,7 +55,7 @@ from pathlib import Path
 from playwright.async_api import Playwright, async_playwright
 
 CDP_URL = "http://localhost:9222"
-CAPTURE_SECONDS = 30
+CAPTURE_SECONDS = 60
 MAX_FRAMES_PER_WS = 200  # cap so a chatty WS doesn't blow up the file
 FRAMES_FILE = Path(__file__).parent / "frames.jsonl"
 SUMMARY_FILE = Path(__file__).parent / "summary.json"
@@ -87,6 +87,87 @@ async def main(console_url: str) -> int:
             return 2
         ctx = browser.contexts[0]
         page = await ctx.new_page()
+        # CDP attach doesn't reliably honor add_init_script in Playwright, so
+        # we use the raw Page.addScriptToEvaluateOnNewDocument CDP primitive.
+        # Hook captures: marker, RTCPeerConnection construction, every data
+        # channel (created OR received), every message on it.
+        SPY = r"""
+(() => {
+  if (window.__poc) return;
+  window.__poc = {
+    installed_at: Date.now(),
+    has_RTCPC: typeof RTCPeerConnection !== 'undefined',
+    has_window_RTCPC: !!window.RTCPeerConnection,
+    has_DataChannel_proto: typeof RTCDataChannel !== 'undefined',
+    dc: [], pc: [], notes: []
+  };
+  function hookDC(dc, why) {
+    window.__poc.dc.push({ ts: Date.now(), kind: why, label: dc.label });
+    dc.addEventListener('open',    () => window.__poc.dc.push({ ts: Date.now(), kind: 'open',    label: dc.label }));
+    dc.addEventListener('close',   () => window.__poc.dc.push({ ts: Date.now(), kind: 'close',   label: dc.label }));
+    dc.addEventListener('message', (ev) => {
+      let body, kind, size;
+      if (ev.data instanceof ArrayBuffer) {
+        kind = 'binary';
+        size = ev.data.byteLength;
+        // base64-encode the bytes (cap at 64KB)
+        const bytes = new Uint8Array(ev.data, 0, Math.min(size, 65536));
+        let bin = '';
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        body = btoa(bin);
+      } else if (typeof ev.data === 'string') {
+        kind = 'string';
+        size = ev.data.length;
+        body = ev.data.slice(0, 65536);
+      } else {
+        kind = 'other';
+        size = 0;
+        body = String(ev.data);
+      }
+      window.__poc.dc.push({ ts: Date.now(), kind: 'msg', label: dc.label, dataKind: kind, size, sample: body });
+    });
+  }
+  // Approach 1: monkey-patch RTCPeerConnection.prototype.createDataChannel directly
+  // so any construction style (new RTCPeerConnection, new mozRTCPeerConnection, etc) is hit.
+  if (typeof RTCPeerConnection !== 'undefined') {
+    const proto = RTCPeerConnection.prototype;
+    const oCreate = proto.createDataChannel;
+    proto.createDataChannel = function(label, init) {
+      window.__poc.notes.push('createDataChannel call label=' + label);
+      const dc = oCreate.call(this, label, init);
+      hookDC(dc, 'created');
+      return dc;
+    };
+    // Intercept the 'datachannel' event by wrapping addEventListener to track
+    // when listeners are attached, but we also blanket-listen ourselves:
+    const oAddEventListener = proto.addEventListener;
+    proto.addEventListener = function(type, listener, opts) {
+      if (type === 'datachannel') {
+        window.__poc.notes.push('datachannel listener attached');
+      }
+      return oAddEventListener.call(this, type, listener, opts);
+    };
+    // Hook setRemoteDescription so we observe SDP being applied — proves a
+    // PeerConnection is being driven, even if construction was missed.
+    const oSetRemote = proto.setRemoteDescription;
+    proto.setRemoteDescription = function(desc) {
+      try { window.__poc.notes.push('setRemoteDescription type=' + (desc && desc.type) + ' sdpLen=' + (desc && desc.sdp || '').length); } catch(_){}
+      // Attach datachannel listener on this PC instance now that we have it.
+      const self = this;
+      try {
+        oAddEventListener.call(self, 'datachannel', (ev) => hookDC(ev.channel, 'received'));
+      } catch(_){}
+      return oSetRemote.apply(this, arguments);
+    };
+    window.__poc.notes.push('proto patched');
+  } else {
+    window.__poc.notes.push('RTCPeerConnection not on globalThis');
+  }
+})();
+"""
+        cdp = await ctx.new_cdp_session(page)
+        await cdp.send("Page.enable")
+        await cdp.send("Page.addScriptToEvaluateOnNewDocument", {"source": SPY})
 
         sockets: list[dict] = []
         frames_log: list[dict] = []
@@ -141,8 +222,16 @@ async def main(console_url: str) -> int:
         except Exception as e:
             print(f"navigate warning (continuing): {e}", flush=True)
 
-        print(f"capturing for {CAPTURE_SECONDS}s …", flush=True)
+        print(f"capturing for {CAPTURE_SECONDS}s ...", flush=True)
         await asyncio.sleep(CAPTURE_SECONDS)
+
+        # Pull the in-page spy log before closing the page.
+        try:
+            poc_log = await page.evaluate("JSON.stringify(window.__poc || {})")
+        except Exception as e:
+            poc_log = json.dumps({"error": str(e)})
+        DC_FILE = Path(__file__).parent / "datachannel.json"
+        DC_FILE.write_text(poc_log, encoding="utf-8")
 
         # Don't close the user's tab; just close our page.
         await page.close()
@@ -156,8 +245,9 @@ async def main(console_url: str) -> int:
         SUMMARY_FILE.write_text(json.dumps(summary, indent=2, default=str))
         total_frames = sum(s["in_count"] + s["out_count"] for s in sockets)
         print(f"\ndone. {len(sockets)} websocket(s), {total_frames} frame(s)", flush=True)
-        print(f"  frames → {FRAMES_FILE}")
-        print(f"  summary → {SUMMARY_FILE}")
+        print(f"  frames    -> {FRAMES_FILE}")
+        print(f"  summary   -> {SUMMARY_FILE}")
+        print(f"  datachan  -> {DC_FILE}")
         return 0
 
 

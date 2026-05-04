@@ -1,0 +1,2 @@
+playwright>=1.49
+greenlet>=3.2  # Python 3.14 wheels live here

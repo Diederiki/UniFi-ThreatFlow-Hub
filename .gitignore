@@ -50,3 +50,11 @@ Thumbs.db
 # docker volume mounts (if ever bind-mounted)
 data/
 volumes/
+
+# Cloud-proxy POC capture outputs (ephemeral, may contain session data)
+tools/cloudproxy_poc/datachannel.json
+tools/cloudproxy_poc/frames.jsonl
+tools/cloudproxy_poc/summary.json
+tools/cloudproxy_poc/run.log
+tools/cloudproxy_capture/*.json
+tools/cloudproxy_capture/*.jsonl
