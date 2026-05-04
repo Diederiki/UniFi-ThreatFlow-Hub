@@ -11,6 +11,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
+from app.enrichment import classify_port
 from app.geoip import country_for
 from app.parser import (
     IE_destinationIPv4Address, IE_destinationMacAddress,
@@ -127,8 +128,8 @@ def map_record(
         "destination_hostname": "",
         "destination_country":  country_for(str(rec.get(IE_destinationIPv4Address, ""))),
         "protocol":             PROTO_NAMES.get(proto, str(proto)),
-        "application":          "",
-        "application_category": "",
+        "application":          classify_port(PROTO_NAMES.get(proto, ""), int(rec.get(IE_destinationTransportPort, 0)))[0],
+        "application_category": classify_port(PROTO_NAMES.get(proto, ""), int(rec.get(IE_destinationTransportPort, 0)))[1],
         "bytes_up":             bytes_up,
         "bytes_down":           bytes_down,
         "packets_up":           pkts_up,
