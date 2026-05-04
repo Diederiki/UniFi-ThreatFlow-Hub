@@ -36,6 +36,16 @@ SPY_SOURCE = r"""
         window.__streamer.ws_opens[idx].closeReason = String(ev.reason || '').slice(0, 60);
       } catch(_){} });
       ws.addEventListener('error', () => { try { window.__streamer.ws_opens[idx].error = true; } catch(_){} });
+      // Count inbound + outbound frames so we can see whether the MQTT
+      // layer is exchanging anything at all.
+      window.__streamer.ws_opens[idx].rx = 0;
+      window.__streamer.ws_opens[idx].tx = 0;
+      ws.addEventListener('message', () => { try { window.__streamer.ws_opens[idx].rx += 1; } catch(_){} });
+      const oSend = ws.send.bind(ws);
+      ws.send = function(data) {
+        try { window.__streamer.ws_opens[idx].tx += 1; } catch(_){}
+        return oSend(data);
+      };
       return ws;
     };
     Wrapped.prototype = oWS.prototype;
