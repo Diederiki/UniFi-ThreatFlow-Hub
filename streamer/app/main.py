@@ -66,9 +66,10 @@ async def _import_cookies_if_present(ctx: BrowserContext) -> int:
             cleaned.append(cc)
         await ctx.add_cookies(cleaned)
         log.info("imported %d cookie(s) from %s", len(cleaned), p)
-        # Move the file aside so we don't keep re-importing the same set
-        # on every restart.
-        os.rename(p, p + ".applied")
+        # Cookies import is idempotent (add_cookies overwrites by
+        # name+domain), so we leave the file in place. On subsequent
+        # restarts we re-import which is harmless and protects against a
+        # corrupted persistent profile.
         return len(cleaned)
     except Exception as e:
         log.error("cookie import failed: %s", e)
