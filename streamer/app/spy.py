@@ -17,19 +17,26 @@ SPY_SOURCE = r"""
   if (window.__streamer) return;
   window.__streamer = { dc: [], started_at: Date.now(), last_seen: 0, any_count: 0, ws_opens: [] };
 
-  // Hook WebSocket constructor so we can see whether AWS IoT MQTT WS
-  // is even opening. URL only — payloads we don't need (the data lives
-  // on the WebRTC data channels we hook below).
+  // Hook WebSocket so we can see open/close codes — if the AWS IoT
+  // MQTT WS keeps reconnecting, the close codes tell us why.
   try {
     const oWS = window.WebSocket;
     const Wrapped = function(url, protocols) {
-      try {
-        const u = String(url || '');
-        // truncate signed AWS query string so we don't blow up the JSON
-        const trimmed = u.length > 240 ? u.slice(0, 240) + '…' : u;
-        window.__streamer.ws_opens.push({ ts: Date.now(), url: trimmed });
-      } catch(_){}
-      return new oWS(url, protocols);
+      const ws = new oWS(url, protocols);
+      const u = String(url || '');
+      // host+path only, drop signed query string so JSON stays small
+      const host = u.replace(/\?.*$/, '');
+      const idx = window.__streamer.ws_opens.length;
+      window.__streamer.ws_opens.push({
+        ts: Date.now(), host: host, opened: false, closeCode: null, closeReason: null
+      });
+      ws.addEventListener('open',  () => { try { window.__streamer.ws_opens[idx].opened = true; } catch(_){} });
+      ws.addEventListener('close', (ev) => { try {
+        window.__streamer.ws_opens[idx].closeCode = ev.code;
+        window.__streamer.ws_opens[idx].closeReason = String(ev.reason || '').slice(0, 60);
+      } catch(_){} });
+      ws.addEventListener('error', () => { try { window.__streamer.ws_opens[idx].error = true; } catch(_){} });
+      return ws;
     };
     Wrapped.prototype = oWS.prototype;
     Wrapped.CONNECTING = oWS.CONNECTING;
