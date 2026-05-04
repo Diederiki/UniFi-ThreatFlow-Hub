@@ -13,12 +13,16 @@ type IpfixSource = {
   bytes_24h: number;
   distinct_destinations_24h: number;
   is_known_branch: boolean;
+  is_enabled_branch: boolean;
+  has_wan_ip_mapping: boolean;
 };
 
 type Resp = {
   items: IpfixSource[];
-  total_known_branches: number;
+  total_enabled_branches: number;
+  total_with_data_24h: number;
   sending_now: number;
+  awaiting_admin: number;
 };
 
 function fmtBytes(n: number): string {
@@ -41,10 +45,14 @@ function fmtAgo(iso: string | null): string {
 
 function statusFor(r: IpfixSource): { dot: string; text: string; cls: string } {
   if (r.rows_5m > 0)
-    return { dot: "🟢", text: "live", cls: "text-success" };
+    return { dot: "●", text: "live", cls: "text-success" };
   if (r.rows_1h > 0)
-    return { dot: "🟡", text: "stale", cls: "text-warn" };
-  return { dot: "⚪", text: "silent", cls: "text-muted" };
+    return { dot: "●", text: "stale", cls: "text-warn" };
+  if (r.rows_24h > 0)
+    return { dot: "●", text: "idle 24h", cls: "text-muted" };
+  if (r.is_enabled_branch)
+    return { dot: "○", text: "awaiting admin", cls: "text-danger" };
+  return { dot: "○", text: "no data", cls: "text-muted" };
 }
 
 export default function IpfixSourcesPage() {
@@ -78,9 +86,16 @@ export default function IpfixSourcesPage() {
           </p>
         </div>
         {data && (
-          <div className="text-xs text-muted">
-            <span className="text-success">●</span> {data.sending_now} live ·{" "}
-            {data.total_known_branches} sending in last 24h
+          <div className="text-xs text-muted text-right">
+            <div>
+              <span className="text-success">●</span> {data.sending_now} live ·{" "}
+              {data.total_with_data_24h}/{data.total_enabled_branches} branches sent in last 24h
+            </div>
+            {data.awaiting_admin > 0 && (
+              <div className="text-danger">
+                {data.awaiting_admin} branch(es) still awaiting admin to enable IPFIX
+              </div>
+            )}
           </div>
         )}
       </div>
