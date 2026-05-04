@@ -91,4 +91,14 @@ export const branchesApi = {
   disable: (id: string) => api<Branch>(`/branches/${id}/disable`, { method: "POST" }),
   test:    (id: string) => api<TestConnectionResult>(`/branches/${id}/test-connection`, { method: "POST" }),
   discover:(id: string) => api<TestConnectionResult>(`/branches/${id}/discover-sites`, { method: "POST" }),
+  importFromCloud: (api_key: string) =>
+    api<ImportSummary>("/branches/import-from-cloud", { method: "POST", body: JSON.stringify({ api_key }) }),
+};
+
+export type ImportSummary = {
+  total_seen: number;
+  created: number;
+  skipped_existing: number;
+  failed: number;
+  errors: string[];
 };
