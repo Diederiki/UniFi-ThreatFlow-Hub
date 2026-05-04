@@ -46,7 +46,12 @@ CHROMIUM_ARGS = [
     # the system resolver (which we've forced IPv4-only at the container
     # level). Without this, Chromium prefers AAAA records and gets ICE
     # 701 errors trying to reach Cloudflare TURN over IPv6.
-    "--disable-features=IsolateOrigins,site-per-process,AsyncDns",
+    "--disable-features=IsolateOrigins,site-per-process,AsyncDns,WebRtcHideLocalIpsWithMdns",
+    # Force-map Cloudflare TURN/STUN to known IPv4 addresses. Chromium's
+    # WebRTC stack picks up host-resolver-rules and short-circuits its
+    # internal DNS for these hostnames. Belt-and-braces with the
+    # IPv6-disabled container.
+    "--host-resolver-rules=MAP stun.cloudflare.com 162.159.207.0, MAP turn.cloudflare.com 141.101.90.1, MAP turns.cloudflare.com 141.101.90.1",
     "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
 ]
 
