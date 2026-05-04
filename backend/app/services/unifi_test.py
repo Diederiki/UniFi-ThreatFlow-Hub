@@ -56,47 +56,91 @@ def _ms(t0: float) -> int:
     return int((time.perf_counter() - t0) * 1000)
 
 
+def _extract_name(obj: dict) -> str | None:
+    """Site Manager nests the human name in different places per object type.
+    Walk the common ones and return the first non-empty string."""
+    for key in ("name", "siteName", "hostName", "displayName"):
+        v = obj.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    # Console rows: name lives inside reportedState.hostname or .name
+    rs = obj.get("reportedState") or {}
+    if isinstance(rs, dict):
+        for key in ("name", "hostname"):
+            v = rs.get(key)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+    meta = obj.get("meta") or {}
+    if isinstance(meta, dict):
+        for key in ("name", "displayName"):
+            v = meta.get(key)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+    return None
+
+
 async def _cloud_probe(api_key: str, started: float) -> TestConnectionResult:
-    """Site Manager EA API — lists every host the API key has access to."""
-    endpoint = f"{SITE_MANAGER_BASE}/ea/sites"
+    """Site Manager EA API. /ea/hosts has the human console names ("AmSpec-
+    Dordrecht"); /ea/sites has the per-site UUIDs needed for the collector.
+    We hit both and merge so the user sees readable names."""
+    headers = {"X-API-KEY": api_key, "Accept": "application/json"}
+    hosts_endpoint = f"{SITE_MANAGER_BASE}/ea/hosts"
+    sites_endpoint = f"{SITE_MANAGER_BASE}/ea/sites"
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(
-                endpoint,
-                headers={"X-API-KEY": api_key, "Accept": "application/json"},
+        async with httpx.AsyncClient(timeout=12) as client:
+            hosts_resp, sites_resp = await asyncio.gather(
+                client.get(hosts_endpoint, headers=headers),
+                client.get(sites_endpoint, headers=headers),
             )
     except httpx.HTTPError as e:
-        return TestConnectionResult(ok=False, endpoint_used=endpoint, duration_ms=_ms(started),
+        return TestConnectionResult(ok=False, endpoint_used=sites_endpoint, duration_ms=_ms(started),
                                     error=f"network_error: {type(e).__name__}: {e}")
 
-    if r.status_code != 200:
-        # Helpful body excerpt for the UI to surface
-        body = r.text[:300].replace("\n", " ")
+    # Treat success as "either /hosts OR /sites returned 200" — the API key
+    # might have host-only or site-only scope depending on its grant.
+    hosts_ok = hosts_resp.status_code == 200
+    sites_ok = sites_resp.status_code == 200
+    if not (hosts_ok or sites_ok):
+        body = (sites_resp.text or hosts_resp.text)[:300].replace("\n", " ")
         return TestConnectionResult(
-            ok=False, endpoint_used=endpoint, duration_ms=_ms(started),
-            error=f"http_{r.status_code}: {body}",
+            ok=False, endpoint_used=sites_endpoint, duration_ms=_ms(started),
+            error=f"http_hosts={hosts_resp.status_code}_sites={sites_resp.status_code}: {body}",
         )
 
-    try:
-        data = r.json()
-    except Exception:  # noqa: BLE001
-        return TestConnectionResult(ok=False, endpoint_used=endpoint, duration_ms=_ms(started),
-                                    error="non_json_response")
+    names: list[str] = []
+    seen: set[str] = set()
 
-    # Site Manager returns either {data: [...]} or {sites: [...]} depending on version
-    rows = data.get("data") or data.get("sites") or []
-    sites: list[str] = []
-    for s in rows:
-        # Prefer human-readable name; fall back to siteId / id / hostId
-        label = (s.get("name") or s.get("siteName") or s.get("hostName")
-                 or s.get("siteId") or s.get("id") or s.get("hostId") or "")
-        if label:
-            sites.append(str(label))
+    if hosts_ok:
+        try:
+            for h in (hosts_resp.json().get("data") or []):
+                if not isinstance(h, dict):
+                    continue
+                name = _extract_name(h)
+                if name and name not in seen:
+                    seen.add(name); names.append(name)
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Append site UUIDs that don't already appear (named consoles preferred)
+    if sites_ok:
+        try:
+            site_count = 0
+            for s in (sites_resp.json().get("data") or []):
+                if not isinstance(s, dict):
+                    continue
+                site_count += 1
+                # Prefer human name; fall back to internalReference (often "default")
+                # and finally the raw site UUID
+                name = _extract_name(s) or s.get("internalReference") or s.get("siteId") or s.get("id")
+                if name and name not in seen:
+                    seen.add(str(name)); names.append(str(name))
+        except Exception:  # noqa: BLE001
+            pass
 
     return TestConnectionResult(
-        ok=True, endpoint_used=endpoint, duration_ms=_ms(started),
-        sites_discovered=sites[:100],
-        unifi_os_version=str(data.get("apiVersion") or "") or None,
+        ok=True, endpoint_used=f"{hosts_endpoint} + {sites_endpoint}",
+        duration_ms=_ms(started),
+        sites_discovered=names[:100],
         is_mock=False,
     )
 
