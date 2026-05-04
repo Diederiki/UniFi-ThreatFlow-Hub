@@ -12,6 +12,7 @@ from typing import Any
 
 from app.config import settings
 from app.db import ch
+from app.threat_enricher import enrich_threats
 
 log = logging.getLogger("collector.writer")
 
@@ -35,6 +36,7 @@ THREAT_COLS = [
     "destination_ip", "destination_port", "destination_hostname", "destination_country",
     "protocol",
     "client_ip", "client_mac", "client_hostname",
+    "mitre_techniques", "mitre_tactics", "cve_refs",
     "raw_json", "collector_version",
 ]
 
@@ -60,6 +62,7 @@ class BatchWriter:
             await self._insert_with_retry("raw_flow_events", batch_to_insert, FLOW_COLS)
 
     async def submit_threats(self, rows: list[dict[str, Any]]) -> None:
+        enrich_threats(rows)
         batch_to_insert: list[dict[str, Any]] | None = None
         async with self._lock:
             self._threats.extend(rows)

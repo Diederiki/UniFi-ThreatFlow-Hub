@@ -91,6 +91,9 @@ class ThreatEvent(FlowEvent):
     signature: str
     threat_category: str | None
     client_ip: str | None
+    mitre_techniques: list[str] = []
+    mitre_tactics: list[str] = []
+    cve_refs: list[str] = []
 
 
 class EventsPage(BaseModel):

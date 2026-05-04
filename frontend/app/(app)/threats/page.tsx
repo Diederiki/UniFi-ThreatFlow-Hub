@@ -13,6 +13,46 @@ function severityCls(s: string): string {
   return "bg-panel2 text-muted border-border";
 }
 
+function MitreChips({ techniques, tactics }: { techniques: string[]; tactics: string[] }) {
+  if (techniques.length === 0 && tactics.length === 0) return <span className="text-muted">—</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {techniques.map((t) => (
+        <a
+          key={t}
+          href={`https://attack.mitre.org/techniques/${t.replace(".", "/")}/`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[10px] px-1.5 py-0.5 rounded border border-accent/30 bg-accent/10 text-accent hover:bg-accent/20"
+          title={`MITRE technique ${t}${tactics.length ? ` · ${tactics.join(", ")}` : ""}`}
+        >
+          {t}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function CveRefs({ refs }: { refs: string[] }) {
+  if (refs.length === 0) return <span className="text-muted">—</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {refs.map((c) => (
+        <a
+          key={c}
+          href={`https://nvd.nist.gov/vuln/detail/${c}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[10px] px-1.5 py-0.5 rounded border border-warn/30 bg-warn/10 text-warn hover:bg-warn/20"
+          title={`Lookup ${c} on NVD`}
+        >
+          {c}
+        </a>
+      ))}
+    </div>
+  );
+}
+
 export default function ThreatsPage() {
   const { timeframe } = useTimeframe();
   const toast = useToast();
@@ -64,20 +104,24 @@ export default function ThreatsPage() {
               <th className="text-left px-3 py-2 font-medium">Branch</th>
               <th className="text-left px-3 py-2 font-medium">Sev</th>
               <th className="text-left px-3 py-2 font-medium">Signature</th>
+              <th className="text-left px-3 py-2 font-medium">MITRE</th>
+              <th className="text-left px-3 py-2 font-medium">CVE</th>
               <th className="text-left px-3 py-2 font-medium">Source</th>
               <th className="text-left px-3 py-2 font-medium">Destination</th>
               <th className="text-left px-3 py-2 font-medium">Action</th>
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-muted text-sm">Loading…</td></tr>}
-            {!loading && data?.items.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-muted text-sm">No matches.</td></tr>}
+            {loading && <tr><td colSpan={9} className="px-4 py-8 text-center text-muted text-sm">Loading…</td></tr>}
+            {!loading && data?.items.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-muted text-sm">No matches.</td></tr>}
             {!loading && data?.items.map((t) => (
-              <tr key={t.event_id} className="border-b border-border last:border-b-0 hover:bg-panel2/40">
+              <tr key={t.event_id} className="border-b border-border last:border-b-0 hover:bg-panel2/40 align-top">
                 <td className="px-3 py-2 text-xs text-muted whitespace-nowrap">{new Date(t.event_time).toLocaleTimeString()}</td>
                 <td className="px-3 py-2 num text-xs">{t.branch_code}</td>
                 <td className="px-3 py-2"><span className={`text-[10px] px-1.5 py-0.5 rounded border ${severityCls(t.severity)}`}>{t.severity}</span></td>
-                <td className="px-3 py-2 text-xs">{t.signature || "—"}</td>
+                <td className="px-3 py-2 text-xs max-w-[20rem]">{t.signature || "—"}</td>
+                <td className="px-3 py-2 text-xs"><MitreChips techniques={t.mitre_techniques ?? []} tactics={t.mitre_tactics ?? []} /></td>
+                <td className="px-3 py-2 text-xs"><CveRefs refs={t.cve_refs ?? []} /></td>
                 <td className="px-3 py-2 num text-xs">{t.source_ip}</td>
                 <td className="px-3 py-2 num text-xs">{t.destination_hostname || t.destination_ip}{t.destination_country ? ` · ${t.destination_country}` : ""}</td>
                 <td className="px-3 py-2 text-xs">{t.action}</td>

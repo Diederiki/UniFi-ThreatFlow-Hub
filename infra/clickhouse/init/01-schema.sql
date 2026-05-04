@@ -80,15 +80,28 @@ CREATE TABLE IF NOT EXISTS threatflow.raw_threat_events (
     client_ip             String,
     client_mac            String,
     client_hostname       String,
+    mitre_techniques      Array(LowCardinality(String)) DEFAULT [],
+    mitre_tactics         Array(LowCardinality(String)) DEFAULT [],
+    cve_refs              Array(String) DEFAULT [],
     raw_json              String CODEC(ZSTD(3)),
     collector_version     LowCardinality(String),
     INDEX idx_signature       signature        TYPE bloom_filter GRANULARITY 4,
-    INDEX idx_threat_category threat_category  TYPE set(0)        GRANULARITY 4
+    INDEX idx_threat_category threat_category  TYPE set(0)        GRANULARITY 4,
+    INDEX idx_mitre_tech      mitre_techniques TYPE bloom_filter GRANULARITY 4,
+    INDEX idx_cve_refs        cve_refs         TYPE bloom_filter GRANULARITY 4
 ) ENGINE = ReplacingMergeTree(ingest_time)
 PARTITION BY toYYYYMM(event_time)
 ORDER BY (branch_id, event_time, event_hash)
 TTL toDateTime(event_time) + INTERVAL 180 DAY DELETE
 SETTINGS index_granularity = 8192;
+
+-- For databases created before the MITRE/CVE columns were added, idempotently
+-- bring them up to schema. ClickHouse 24+ supports IF NOT EXISTS on columns + indexes.
+ALTER TABLE threatflow.raw_threat_events ADD COLUMN IF NOT EXISTS mitre_techniques Array(LowCardinality(String)) DEFAULT [] AFTER client_hostname;
+ALTER TABLE threatflow.raw_threat_events ADD COLUMN IF NOT EXISTS mitre_tactics    Array(LowCardinality(String)) DEFAULT [] AFTER mitre_techniques;
+ALTER TABLE threatflow.raw_threat_events ADD COLUMN IF NOT EXISTS cve_refs         Array(String)                  DEFAULT [] AFTER mitre_tactics;
+ALTER TABLE threatflow.raw_threat_events ADD INDEX IF NOT EXISTS idx_mitre_tech mitre_techniques TYPE bloom_filter GRANULARITY 4;
+ALTER TABLE threatflow.raw_threat_events ADD INDEX IF NOT EXISTS idx_cve_refs   cve_refs         TYPE bloom_filter GRANULARITY 4;
 
 
 CREATE TABLE IF NOT EXISTS threatflow.failed_inserts (

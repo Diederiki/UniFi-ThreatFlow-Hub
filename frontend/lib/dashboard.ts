@@ -68,6 +68,9 @@ export type ThreatEvent = FlowEvent & {
   signature: string;
   threat_category: string | null;
   client_ip: string | null;
+  mitre_techniques: string[];
+  mitre_tactics: string[];
+  cve_refs: string[];
 };
 
 export type EventsPage<T = FlowEvent | ThreatEvent> = {

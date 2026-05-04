@@ -94,6 +94,7 @@ async def list_threats(
             source_ip, source_hostname,
             destination_ip, destination_port, destination_hostname, destination_country,
             protocol, signature, threat_category, client_ip,
+            mitre_techniques, mitre_tactics, cve_refs,
             0 AS bytes_up, 0 AS bytes_down,
             '' AS application, '' AS application_category
         FROM threatflow.raw_threat_events
@@ -146,7 +147,10 @@ async def export_threats_csv(
         SELECT event_time, branch_code, branch_name, action, severity, risk,
                signature, threat_category, source_ip, source_hostname,
                destination_ip, destination_hostname, destination_country,
-               protocol, policy_type, policy_name
+               protocol, policy_type, policy_name,
+               arrayStringConcat(mitre_techniques, ',') AS mitre_techniques,
+               arrayStringConcat(mitre_tactics,    ',') AS mitre_tactics,
+               arrayStringConcat(cve_refs,         ',') AS cve_refs
         FROM threatflow.raw_threat_events
         WHERE {" AND ".join(where)}
         ORDER BY event_time DESC
@@ -179,6 +183,7 @@ async def get_threat(event_id: UUID, _user: User = Depends(get_current_user)):
             source_ip, source_hostname,
             destination_ip, destination_port, destination_hostname, destination_country,
             protocol, signature, threat_category, client_ip,
+            mitre_techniques, mitre_tactics, cve_refs,
             0 AS bytes_up, 0 AS bytes_down,
             '' AS application, '' AS application_category
         FROM threatflow.raw_threat_events
