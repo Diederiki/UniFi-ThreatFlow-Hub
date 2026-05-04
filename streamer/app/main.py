@@ -42,7 +42,11 @@ CHROMIUM_ARGS = [
     # Hide Playwright/headless tells that cause Ubiquiti's WebRTC stack
     # (and other anti-bot layers) to refuse the connection.
     "--disable-blink-features=AutomationControlled",
-    "--disable-features=IsolateOrigins,site-per-process",
+    # Important: disable Chromium's built-in async DNS so it falls back to
+    # the system resolver (which we've forced IPv4-only at the container
+    # level). Without this, Chromium prefers AAAA records and gets ICE
+    # 701 errors trying to reach Cloudflare TURN over IPv6.
+    "--disable-features=IsolateOrigins,site-per-process,AsyncDns",
     "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
 ]
 
