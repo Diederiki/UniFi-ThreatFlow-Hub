@@ -39,6 +39,11 @@ CHROMIUM_ARGS = [
     # is fussier about WebRTC without these:
     "--use-fake-ui-for-media-stream",
     "--autoplay-policy=no-user-gesture-required",
+    # Hide Playwright/headless tells that cause Ubiquiti's WebRTC stack
+    # (and other anti-bot layers) to refuse the connection.
+    "--disable-blink-features=AutomationControlled",
+    "--disable-features=IsolateOrigins,site-per-process",
+    "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
 ]
 
 

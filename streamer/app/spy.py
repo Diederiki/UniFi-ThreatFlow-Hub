@@ -16,6 +16,29 @@ SPY_SOURCE = r"""
 (() => {
   if (window.__streamer) return;
   window.__streamer = { dc: [], started_at: Date.now(), last_seen: 0, any_count: 0 };
+
+  // Hide common automation tells. Ubiquiti's WebRTC negotiation refuses
+  // to connect when navigator.webdriver is true; the rest are belt-and-
+  // braces against feature detection.
+  try {
+    Object.defineProperty(Navigator.prototype, 'webdriver', { get: () => undefined });
+  } catch(e) {}
+  try {
+    if (!window.chrome) window.chrome = { runtime: {} };
+  } catch(e) {}
+  // navigator.languages occasionally empty in headless — populate.
+  try {
+    Object.defineProperty(Navigator.prototype, 'languages', { get: () => ['en-US', 'en'] });
+  } catch(e) {}
+  // permissions.query returning 'denied' for everything also flags us.
+  try {
+    const oQuery = navigator.permissions && navigator.permissions.query;
+    if (oQuery) {
+      navigator.permissions.query = (p) => p && p.name === 'notifications'
+        ? Promise.resolve({ state: Notification.permission })
+        : oQuery.call(navigator.permissions, p);
+    }
+  } catch(e) {}
   if (typeof RTCPeerConnection === 'undefined') return;
   const proto = RTCPeerConnection.prototype;
 
