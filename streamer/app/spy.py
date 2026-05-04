@@ -40,10 +40,34 @@ SPY_SOURCE = r"""
       // layer is exchanging anything at all.
       window.__streamer.ws_opens[idx].rx = 0;
       window.__streamer.ws_opens[idx].tx = 0;
-      ws.addEventListener('message', () => { try { window.__streamer.ws_opens[idx].rx += 1; } catch(_){} });
+      window.__streamer.ws_opens[idx].rx_first = [];
+      window.__streamer.ws_opens[idx].tx_first = [];
+      ws.addEventListener('message', (ev) => { try {
+        window.__streamer.ws_opens[idx].rx += 1;
+        if (window.__streamer.ws_opens[idx].rx_first.length < 12) {
+          let s;
+          if (ev.data instanceof ArrayBuffer) {
+            const b = new Uint8Array(ev.data, 0, Math.min(ev.data.byteLength, 200));
+            let bin = ''; for (let i = 0; i < b.length; i++) bin += String.fromCharCode(b[i]);
+            s = 'B' + ev.data.byteLength + ':' + btoa(bin);
+          } else { s = 'S' + (ev.data && ev.data.length) + ':' + String(ev.data).slice(0, 200); }
+          window.__streamer.ws_opens[idx].rx_first.push(s);
+        }
+      } catch(_){} });
       const oSend = ws.send.bind(ws);
       ws.send = function(data) {
-        try { window.__streamer.ws_opens[idx].tx += 1; } catch(_){}
+        try {
+          window.__streamer.ws_opens[idx].tx += 1;
+          if (window.__streamer.ws_opens[idx].tx_first.length < 12) {
+            let s;
+            if (data instanceof ArrayBuffer) {
+              const b = new Uint8Array(data, 0, Math.min(data.byteLength, 200));
+              let bin = ''; for (let i = 0; i < b.length; i++) bin += String.fromCharCode(b[i]);
+              s = 'B' + data.byteLength + ':' + btoa(bin);
+            } else { s = 'S' + (data && data.length) + ':' + String(data).slice(0, 200); }
+            window.__streamer.ws_opens[idx].tx_first.push(s);
+          }
+        } catch(_){}
         return oSend(data);
       };
       return ws;
