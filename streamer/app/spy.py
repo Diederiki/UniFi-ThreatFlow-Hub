@@ -15,13 +15,22 @@ PeerConnection regardless of how it was constructed.
 SPY_SOURCE = r"""
 (() => {
   if (window.__streamer) return;
-  window.__streamer = { dc: [], started_at: Date.now() };
+  window.__streamer = { dc: [], started_at: Date.now(), last_seen: 0, any_count: 0 };
   if (typeof RTCPeerConnection === 'undefined') return;
   const proto = RTCPeerConnection.prototype;
 
+  // Buffer ONLY the events-channel binary frames (those carry the
+  // IDS/IPS/firewall stream we ingest). Every other WS-tunnelled frame
+  // (dashboard:sync, client:sync, device:sync, api:N…) just bumps a
+  // last-seen timestamp so Python can tell "the WebRTC peer is alive"
+  // from "we got security data". Storing all frames blew up tab memory
+  // around 50+ tabs.
   function pushFrame(label, data) {
     if (!(data instanceof ArrayBuffer)) return;
-    if (!String(label).startsWith('ws:/proxy/network/wss/s/')) return;
+    if (!String(label).startsWith('ws:/')) return;
+    window.__streamer.last_seen = Date.now();
+    window.__streamer.any_count += 1;
+    if (!String(label).includes('/events?') && !String(label).endsWith('/events')) return;
     const bytes = new Uint8Array(data, 0, Math.min(data.byteLength, 65536));
     let bin = '';
     for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);

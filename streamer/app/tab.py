@@ -61,17 +61,25 @@ class BranchTab:
         if self.page is None:
             return 0, 0
         try:
-            raw_drain = await self.page.evaluate("(window.__streamerDrain||(()=>[]))()")
+            raw_drain, last_seen, any_count = await self.page.evaluate(
+                "[(window.__streamerDrain||(()=>[]))(),"
+                " (window.__streamer&&window.__streamer.last_seen)||0,"
+                " (window.__streamer&&window.__streamer.any_count)||0]"
+            )
         except Exception as e:
             self.stats.drain_errors += 1
             log.warning("[%s] drain failed: %s", self.branch.branch_code, e)
             return 0, 0
 
         self.stats.last_drain_at = time.time()
+        # last_event_at = JS-side last frame on any ws:/… channel, in ms.
+        # Treat it as our liveness proxy — we want a quiet branch to stay
+        # alive so long as the WebRTC peer is healthy.
+        if last_seen:
+            self.stats.last_event_at = last_seen / 1000.0
         if not raw_drain:
             return 0, 0
         self.stats.drained_messages += len(raw_drain)
-        self.stats.last_event_at = time.time()
 
         # Group frames by channel label so each ChunkParser only sees its
         # own stream (logical msgs span DC frames per-channel).
@@ -141,12 +149,16 @@ class BranchTab:
             return 0, 0
 
     async def is_silent(self) -> bool:
-        """True if no data-channel frames have arrived in too long."""
+        """True if no data-channel frames have arrived in too long.
+        Liveness counts *any* WS-tunnelled frame (dashboard:sync,
+        client:sync, events, ...) — not just security events — so quiet
+        branches with healthy WebRTC peers don't get false-positive
+        reloaded. The new-tab grace matches the silent-timeout to handle
+        slow handshakes."""
+        deadline = settings.tab_silent_timeout_seconds
         if not self.stats.last_event_at:
-            # Be lenient on a brand-new tab — the WebRTC handshake takes
-            # ~5-10s before the first frame arrives.
-            return time.time() - self.stats.started_at > 60
-        return time.time() - self.stats.last_event_at > settings.tab_silent_timeout_seconds
+            return time.time() - self.stats.started_at > deadline
+        return time.time() - self.stats.last_event_at > deadline
 
     async def close(self) -> None:
         if self.page is None:
