@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import signal
@@ -41,16 +42,51 @@ CHROMIUM_ARGS = [
 ]
 
 
+async def _import_cookies_if_present(ctx: BrowserContext) -> int:
+    """If ui-cookies.json was dropped into the profile volume by the
+    operator, load + add it to the context. Returns the number imported."""
+    p = os.path.join(settings.profile_dir, "ui-cookies.json")
+    if not os.path.exists(p):
+        return 0
+    try:
+        with open(p, encoding="utf-8") as f:
+            cookies = json.load(f)
+        if not isinstance(cookies, list) or not cookies:
+            return 0
+        # Playwright requires either url or (domain + path); coerce the
+        # exporter's shape if needed and drop fields it rejects.
+        cleaned = []
+        for c in cookies:
+            cc = {k: v for k, v in c.items() if k in (
+                "name", "value", "domain", "path", "expires", "httpOnly",
+                "secure", "sameSite", "url",
+            )}
+            if "sameSite" in cc and cc["sameSite"] not in ("Strict", "Lax", "None"):
+                cc.pop("sameSite", None)
+            cleaned.append(cc)
+        await ctx.add_cookies(cleaned)
+        log.info("imported %d cookie(s) from %s", len(cleaned), p)
+        # Move the file aside so we don't keep re-importing the same set
+        # on every restart.
+        os.rename(p, p + ".applied")
+        return len(cleaned)
+    except Exception as e:
+        log.error("cookie import failed: %s", e)
+        return 0
+
+
 async def _ensure_logged_in(ctx: BrowserContext) -> bool:
+    await _import_cookies_if_present(ctx)
     page = await ctx.new_page()
     try:
         if await auth.is_logged_in(page):
-            log.info("ui.com session already valid (cookies persisted)")
+            log.info("ui.com session already valid")
             return True
         if not (settings.ui_email and settings.ui_password):
-            log.error("UI_EMAIL / UI_PASSWORD not set; cannot bootstrap login. "
-                      "Provide them via env, OR pre-bake cookies into the volume "
-                      "with STREAMER_BOOTSTRAP_ONLY=true STREAMER_HEADLESS=false.")
+            log.error("ui.com session not valid AND UI_EMAIL / UI_PASSWORD not set. "
+                      "Drop ui-cookies.json into the streamer_profile volume "
+                      "(see tools/cloudproxy_capture/export_session.py) "
+                      "OR set UI_EMAIL+UI_PASSWORD in .env.")
             return False
         return await auth.login(page, settings.ui_email, settings.ui_password)
     finally:
