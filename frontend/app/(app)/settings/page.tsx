@@ -5,6 +5,10 @@ import { suspicionApi, type ScoringWeights } from "@/lib/suspicion";
 import { Field, TextInput } from "@/components/forms/Field";
 import { useToast } from "@/components/Toast";
 import { api, ApiError } from "@/lib/api";
+import { ProfilePanel } from "@/components/settings/ProfilePanel";
+import { UsersPanel } from "@/components/settings/UsersPanel";
+import { SsoPanel } from "@/components/settings/SsoPanel";
+import { meApi, type AppUser } from "@/lib/users";
 
 const SCORING_LABEL: Record<keyof ScoringWeights, string> = {
   high_risk_event: "High-risk IDS/IPS event",
@@ -28,8 +32,23 @@ type GeneralSettings = {
 
 type RetentionItem = { table: string; ttl_days: number };
 
+type Section = "profile" | "users" | "sso" | "general" | "retention" | "scoring";
+
+const SECTIONS: { key: Section; label: string; adminOnly: boolean }[] = [
+  { key: "profile",   label: "Your account",         adminOnly: false },
+  { key: "users",     label: "Users & Access",       adminOnly: true },
+  { key: "sso",       label: "Microsoft Entra SSO",  adminOnly: true },
+  { key: "general",   label: "General",              adminOnly: true },
+  { key: "retention", label: "Retention",            adminOnly: true },
+  { key: "scoring",   label: "Suspicion scoring",    adminOnly: true },
+];
+
 export default function SettingsPage() {
   const toast = useToast();
+  const [me, setMe] = useState<AppUser | null>(null);
+  const [section, setSection] = useState<Section>("profile");
+
+  // Settings sub-state
   const [weights, setWeights] = useState<ScoringWeights | null>(null);
   const [general, setGeneral] = useState<GeneralSettings | null>(null);
   const [retention, setRetention] = useState<RetentionItem[]>([]);
@@ -38,10 +57,18 @@ export default function SettingsPage() {
   const [savingRetention, setSavingRetention] = useState(false);
 
   useEffect(() => {
-    suspicionApi.getScoring().then(setWeights).catch(() => setWeights(null));
-    api<GeneralSettings>("/settings").then(setGeneral).catch(() => setGeneral(null));
-    api<{ items: RetentionItem[] }>("/storage/retention").then((r) => setRetention(r.items)).catch(() => setRetention([]));
+    meApi.get().then(setMe).catch(() => setMe(null));
   }, []);
+
+  useEffect(() => {
+    if (section === "scoring") {
+      suspicionApi.getScoring().then(setWeights).catch(() => setWeights(null));
+    } else if (section === "general") {
+      api<GeneralSettings>("/settings").then(setGeneral).catch(() => setGeneral(null));
+    } else if (section === "retention") {
+      api<{ items: RetentionItem[] }>("/storage/retention").then((r) => setRetention(r.items)).catch(() => setRetention([]));
+    }
+  }, [section]);
 
   async function saveScoring() {
     if (!weights) return;
@@ -88,105 +115,137 @@ export default function SettingsPage() {
     }
   }
 
+  const isAdmin = me?.role === "admin";
+  const visibleSections = SECTIONS.filter((s) => !s.adminOnly || isAdmin);
+
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6">
       <div>
         <h1 className="text-lg font-semibold">Settings</h1>
-        <p className="text-xs text-muted">All sections are admin-only</p>
+        <p className="text-xs text-muted">
+          Signed in as <span className="text-text num">{me?.email ?? "—"}</span>
+          {me && <span className="text-accent/70"> · {me.role}</span>}
+          {!isAdmin && <span className="ml-2">· some sections require admin role</span>}
+        </p>
       </div>
 
-      <div className="panel p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted mb-4">General</h2>
-        {!general ? <div className="text-sm text-muted">Loading…</div> : (
-          <div className="grid sm:grid-cols-2 gap-4">
-            <Field label="Collector max concurrent" hint="1-100">
-              <TextInput type="number" min={1} max={100} value={general.collector_max_concurrent}
-                onChange={(e) => setGeneral({ ...general, collector_max_concurrent: Number(e.target.value) })} />
-            </Field>
-            <Field label="Default polling interval (s)" hint="10-3600">
-              <TextInput type="number" min={10} max={3600} value={general.polling_interval_seconds_default}
-                onChange={(e) => setGeneral({ ...general, polling_interval_seconds_default: Number(e.target.value) })} />
-            </Field>
-            <Field label="Default timeframe">
-              <TextInput value={general.timeframe_default}
-                onChange={(e) => setGeneral({ ...general, timeframe_default: e.target.value })} />
-            </Field>
-            <Field label="Dashboard auto-refresh (s)" hint="5-600">
-              <TextInput type="number" min={5} max={600} value={general.auto_refresh_seconds}
-                onChange={(e) => setGeneral({ ...general, auto_refresh_seconds: Number(e.target.value) })} />
-            </Field>
-          </div>
-        )}
-        <div className="mt-5">
-          <button onClick={saveGeneral} disabled={!general || savingGeneral} className="btn btn-primary disabled:opacity-50">
-            {savingGeneral ? "Saving…" : "Save general"}
-          </button>
+      <div className="grid lg:grid-cols-[200px_1fr] gap-6">
+        {/* Vertical sub-nav */}
+        <nav className="space-y-0.5">
+          {visibleSections.map((s) => {
+            const active = s.key === section;
+            return (
+              <button
+                key={s.key}
+                onClick={() => setSection(s.key)}
+                className={
+                  "w-full text-left px-3 py-2 rounded-md text-sm transition-colors " +
+                  (active
+                    ? "bg-accent/15 text-accent border border-accent/30"
+                    : "text-text/80 hover:text-text hover:bg-panel2 border border-transparent")
+                }
+              >
+                {s.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Section body */}
+        <div className="min-w-0">
+          {section === "profile" && <ProfilePanel onLoaded={setMe} />}
+          {section === "users"   && isAdmin && <UsersPanel currentUserId={me!.id} />}
+          {section === "sso"     && isAdmin && <SsoPanel />}
+
+          {section === "general" && (
+            <div className="panel p-5">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted mb-4">General</h2>
+              {!general ? <div className="text-sm text-muted">Loading…</div> : (
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <Field label="Collector max concurrent" hint="1-100">
+                    <TextInput type="number" min={1} max={100} value={general.collector_max_concurrent}
+                      onChange={(e) => setGeneral({ ...general, collector_max_concurrent: Number(e.target.value) })} />
+                  </Field>
+                  <Field label="Default polling interval (s)" hint="10-3600">
+                    <TextInput type="number" min={10} max={3600} value={general.polling_interval_seconds_default}
+                      onChange={(e) => setGeneral({ ...general, polling_interval_seconds_default: Number(e.target.value) })} />
+                  </Field>
+                  <Field label="Default timeframe">
+                    <TextInput value={general.timeframe_default}
+                      onChange={(e) => setGeneral({ ...general, timeframe_default: e.target.value })} />
+                  </Field>
+                  <Field label="Dashboard auto-refresh (s)" hint="5-600">
+                    <TextInput type="number" min={5} max={600} value={general.auto_refresh_seconds}
+                      onChange={(e) => setGeneral({ ...general, auto_refresh_seconds: Number(e.target.value) })} />
+                  </Field>
+                </div>
+              )}
+              <div className="mt-5">
+                <button onClick={saveGeneral} disabled={!general || savingGeneral} className="btn btn-primary disabled:opacity-50">
+                  {savingGeneral ? "Saving…" : "Save general"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {section === "retention" && (
+            <div className="panel p-5">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted mb-4">Retention (ClickHouse TTL, days)</h2>
+              {retention.length === 0 ? <div className="text-sm text-muted">Loading…</div> : (
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {retention.map((r, i) => (
+                    <Field key={r.table} label={r.table}>
+                      <TextInput type="number" min={1} max={36500} value={r.ttl_days}
+                        onChange={(e) => {
+                          const next = [...retention];
+                          next[i] = { ...r, ttl_days: Number(e.target.value) };
+                          setRetention(next);
+                        }} />
+                    </Field>
+                  ))}
+                </div>
+              )}
+              <div className="mt-5">
+                <button onClick={saveRetention} disabled={savingRetention} className="btn btn-primary disabled:opacity-50">
+                  {savingRetention ? "Saving…" : "Save retention"}
+                </button>
+                <p className="mt-2 text-xs text-muted">Changing TTL issues an <code>ALTER TABLE … MODIFY TTL</code> immediately.</p>
+              </div>
+            </div>
+          )}
+
+          {section === "scoring" && (
+            <div className="panel p-5">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted mb-4">Suspicion scoring weights</h2>
+              {!weights ? <div className="text-sm text-muted">Loading…</div> : (
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {SCORING_KEYS.map((k) => (
+                    <Field key={k} label={SCORING_LABEL[k]}>
+                      <TextInput type="number" step="0.5" value={weights[k]}
+                        onChange={(e) => setWeights({ ...weights, [k]: Number(e.target.value) })} />
+                    </Field>
+                  ))}
+                </div>
+              )}
+              <div className="mt-5 flex items-center gap-2">
+                <button onClick={saveScoring} disabled={!weights || savingScore} className="btn btn-primary disabled:opacity-50">
+                  {savingScore ? "Saving…" : "Save weights"}
+                </button>
+                <button
+                  onClick={() => weights && setWeights({
+                    high_risk_event: 10, medium_risk_event: 5, low_risk_event: 1,
+                    blocked_event: 4, repeated_client: 8, outbound_suspicious: 6,
+                    malware_botnet: 15, large_transfer: 5, known_false_positive: -3,
+                  })}
+                  disabled={!weights}
+                  className="btn"
+                >
+                  Reset to defaults
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
-
-      <div className="panel p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted mb-4">Retention (ClickHouse TTL, days)</h2>
-        {retention.length === 0 ? <div className="text-sm text-muted">Loading…</div> : (
-          <div className="grid sm:grid-cols-2 gap-3">
-            {retention.map((r, i) => (
-              <Field key={r.table} label={r.table}>
-                <TextInput type="number" min={1} max={36500} value={r.ttl_days}
-                  onChange={(e) => {
-                    const next = [...retention];
-                    next[i] = { ...r, ttl_days: Number(e.target.value) };
-                    setRetention(next);
-                  }} />
-              </Field>
-            ))}
-          </div>
-        )}
-        <div className="mt-5">
-          <button onClick={saveRetention} disabled={savingRetention} className="btn btn-primary disabled:opacity-50">
-            {savingRetention ? "Saving…" : "Save retention"}
-          </button>
-          <span className="ml-3 text-xs text-muted">Changing TTL issues an `ALTER TABLE … MODIFY TTL` immediately.</span>
-        </div>
-      </div>
-
-      <div className="panel p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted mb-4">Suspicion scoring weights</h2>
-        {!weights ? <div className="text-sm text-muted">Loading…</div> : (
-          <div className="grid sm:grid-cols-2 gap-4">
-            {SCORING_KEYS.map((k) => (
-              <Field key={k} label={SCORING_LABEL[k]}>
-                <TextInput type="number" step="0.5" value={weights[k]}
-                  onChange={(e) => setWeights({ ...weights, [k]: Number(e.target.value) })} />
-              </Field>
-            ))}
-          </div>
-        )}
-        <div className="mt-5 flex items-center gap-2">
-          <button onClick={saveScoring} disabled={!weights || savingScore} className="btn btn-primary disabled:opacity-50">
-            {savingScore ? "Saving…" : "Save weights"}
-          </button>
-          <button
-            onClick={() => weights && setWeights({
-              high_risk_event: 10, medium_risk_event: 5, low_risk_event: 1,
-              blocked_event: 4, repeated_client: 8, outbound_suspicious: 6,
-              malware_botnet: 15, large_transfer: 5, known_false_positive: -3,
-            })}
-            disabled={!weights}
-            className="btn"
-          >
-            Reset to defaults
-          </button>
-        </div>
-      </div>
-
-      <div className="panel p-5 text-xs text-muted">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted mb-2 normal-case">User / role management · API keys · Backup schedule</h2>
-        <p className="mb-2">These surfaces aren't UI-driven yet. Today the equivalent operations are:</p>
-        <ul className="list-disc list-inside space-y-1">
-          <li>Add a user → run <code className="text-text">scripts/create-admin.sh</code> on the host with a different ADMIN_EMAIL</li>
-          <li>Roles are seeded by Alembic (admin / operator / viewer); change a user's role via psql</li>
-          <li>Backups: <code className="text-text">scripts/backup.sh</code> runs Postgres dump + ClickHouse FREEZE → tarball</li>
-          <li>API keys: not yet implemented (Phase 8 candidate)</li>
-        </ul>
       </div>
     </div>
   );
