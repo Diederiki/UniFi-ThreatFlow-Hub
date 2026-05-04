@@ -118,6 +118,7 @@ async def _open_tabs(ctx: BrowserContext) -> list[BranchTab]:
 async def _supervisor_loop(tabs: list[BranchTab], stop: asyncio.Event) -> None:
     """Periodic drain + restart of silent tabs."""
     next_drain = time.time() + settings.drain_seconds
+    next_stats = time.time() + 60
     while not stop.is_set():
         await asyncio.sleep(1.0)
         now = time.time()
@@ -125,6 +126,21 @@ async def _supervisor_loop(tabs: list[BranchTab], stop: asyncio.Event) -> None:
             next_drain = now + settings.drain_seconds
             # Drain all tabs in parallel; each ingests on its own thread.
             await asyncio.gather(*(t.drain_once() for t in tabs), return_exceptions=True)
+        if now >= next_stats:
+            next_stats = now + 60
+            alive = sum(1 for t in tabs if t.stats.last_event_at)
+            with_events = sum(1 for t in tabs if t.stats.drained_messages > 0)
+            total_threats = sum(t.stats.rows_threat for t in tabs)
+            total_flows = sum(t.stats.rows_flow for t in tabs)
+            top_active = sorted(tabs, key=lambda t: -t.stats.drained_messages)[:5]
+            log.info(
+                "stats: %d/%d tabs receiving WS, %d/%d ever-drained-events, "
+                "lifetime: flows=%d threats=%d. top: %s",
+                alive, len(tabs), with_events, len(tabs),
+                total_flows, total_threats,
+                ", ".join(f"{t.branch.branch_code}={t.stats.drained_messages}"
+                          for t in top_active),
+            )
         # Cheap silent-tab check on the same tick: pick one tab per pass.
         # Avoids stampeding restarts if many tabs go silent at once.
         for t in tabs:
