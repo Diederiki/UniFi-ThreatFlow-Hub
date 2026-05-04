@@ -69,12 +69,14 @@ async def import_from_cloud(
     and reused for every created branch — paste once, get one branch per
     site automatically.
     """
-    summary = await import_all_sites(db, payload.api_key)
+    summary = await import_all_sites(db, payload.api_key, firewalls_only=payload.firewalls_only)
     await log_action(
         db, actor=actor, action="branch.import_from_cloud", entity_type="branch",
         metadata={
             "total_seen": summary.total_seen, "created": summary.created,
-            "skipped_existing": summary.skipped_existing, "failed": summary.failed,
+            "skipped_existing": summary.skipped_existing,
+            "skipped_non_firewall": summary.skipped_non_firewall,
+            "failed": summary.failed, "firewalls_only": payload.firewalls_only,
         },
     )
     await db.commit()

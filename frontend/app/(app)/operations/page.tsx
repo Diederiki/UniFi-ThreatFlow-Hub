@@ -26,7 +26,9 @@ function fmtRel(iso: string | null): string {
   return new Date(iso).toLocaleString();
 }
 
-const REFRESH_MS = 2000;
+// 100ms = 10 polls/sec — matches the Live · 100 ms reference. Heavy on the
+// backend if 5+ tabs are open; consider 200-500ms in production if needed.
+const REFRESH_MS = 100;
 
 export default function OperationsPage() {
   const toast = useToast();
