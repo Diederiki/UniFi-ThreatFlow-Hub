@@ -83,12 +83,6 @@ async def ipfix_sources(_user: User = Depends(get_current_user)) -> IpfixSources
             is_known_branch=not str(r["branch_code"]).startswith("unknown-"),
         ))
 
-    total_known = await ch.query_one(
-        "SELECT count() AS c FROM (SELECT id FROM threatflow.raw_flow_events WHERE 1=0)"
-    )
-    # We want a count of enabled branches from Postgres but ClickHouse
-    # doesn't have access — return ingest-side counts only and let the UI
-    # render the "X of Y branches" caption from /api/branches if it wants.
     return IpfixSourcesResponse(
         items=items,
         total_known_branches=len(items),
