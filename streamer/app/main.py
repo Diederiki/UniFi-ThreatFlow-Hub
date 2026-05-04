@@ -58,17 +58,33 @@ CHROMIUM_ARGS = [
 
 async def _import_cookies_if_present(ctx: BrowserContext) -> int:
     """If ui-cookies.json was dropped into the profile volume by the
-    operator, load + add it to the context. Returns the number imported."""
+    operator, load + add it to the context. Returns the number imported.
+
+    Accepts either of two shapes:
+      - legacy:  [<cookie>, ...]
+      - current: {"cookies": [...], "local_storage": {origin: {k: v}}}
+
+    localStorage is applied to a temporary page so the unifi.ui.com origin
+    has the AWS Cognito IdentityID + cached creds the user's normal browser
+    accumulated. Without those, AWS IoT rejects PUBLISH with
+    "Device not linked".
+    """
     p = os.path.join(settings.profile_dir, "ui-cookies.json")
     if not os.path.exists(p):
         return 0
     try:
         with open(p, encoding="utf-8") as f:
-            cookies = json.load(f)
-        if not isinstance(cookies, list) or not cookies:
+            data = json.load(f)
+        if isinstance(data, list):
+            cookies, local_storage = data, {}
+        elif isinstance(data, dict):
+            cookies = data.get("cookies") or []
+            local_storage = data.get("local_storage") or {}
+        else:
             return 0
-        # Playwright requires either url or (domain + path); coerce the
-        # exporter's shape if needed and drop fields it rejects.
+        if not cookies and not local_storage:
+            return 0
+
         cleaned = []
         for c in cookies:
             cc = {k: v for k, v in c.items() if k in (
@@ -78,12 +94,28 @@ async def _import_cookies_if_present(ctx: BrowserContext) -> int:
             if "sameSite" in cc and cc["sameSite"] not in ("Strict", "Lax", "None"):
                 cc.pop("sameSite", None)
             cleaned.append(cc)
-        await ctx.add_cookies(cleaned)
+        if cleaned:
+            await ctx.add_cookies(cleaned)
+
+        if local_storage:
+            staging = await ctx.new_page()
+            try:
+                for origin, kv in local_storage.items():
+                    if not kv:
+                        continue
+                    try:
+                        await staging.goto(origin, wait_until="domcontentloaded", timeout=15_000)
+                        await staging.evaluate(
+                            "(items) => { for (const [k, v] of items) { try { localStorage.setItem(k, v); } catch(_){} } }",
+                            list(kv.items()),
+                        )
+                        log.info("imported %d localStorage item(s) for %s", len(kv), origin)
+                    except Exception as e:
+                        log.warning("localStorage import failed for %s: %s", origin, e)
+            finally:
+                await staging.close()
+
         log.info("imported %d cookie(s) from %s", len(cleaned), p)
-        # Cookies import is idempotent (add_cookies overwrites by
-        # name+domain), so we leave the file in place. On subsequent
-        # restarts we re-import which is harmless and protects against a
-        # corrupted persistent profile.
         return len(cleaned)
     except Exception as e:
         log.error("cookie import failed: %s", e)
