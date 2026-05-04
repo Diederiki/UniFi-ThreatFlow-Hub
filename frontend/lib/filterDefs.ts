@@ -90,5 +90,6 @@ export const BRANCH_FILTERS: FilterDef[] = [
   { key: "country",         label: "Country",     type: "text" },
   { key: "tag",             label: "Tag",         type: "text",   placeholder: "apac" },
   { key: "enabled",         label: "Enabled",     type: "boolean" },
+  { key: "online",          label: "Online only", type: "boolean" },
   { key: "status",          label: "Status",      type: "select", options: COLLECTOR_STATES },
 ];

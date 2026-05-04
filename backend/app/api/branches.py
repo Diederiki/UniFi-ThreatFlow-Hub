@@ -30,9 +30,12 @@ async def list_branches(
     enabled: bool | None = None,
     tag: str | None = None,
     status: str | None = None,
+    online: bool | None = None,
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
+    """`online=true` shorthand for: enabled AND collector_status.status == 'ok'.
+    Useful for the Branches list "Hide offline" toggle."""
     rows = await svc.list_branches(db)
     items = [svc.to_out(r) for r in rows]
     if search:
@@ -46,6 +49,10 @@ async def list_branches(
         items = [b for b in items if tag in (b.tags or [])]
     if status:
         items = [b for b in items if (b.status and b.status.status == status)]
+    if online is True:
+        items = [b for b in items if b.enabled and b.status and b.status.status == "ok"]
+    elif online is False:
+        items = [b for b in items if not (b.enabled and b.status and b.status.status == "ok")]
     return BranchListOut(items=items, total=len(items))
 
 

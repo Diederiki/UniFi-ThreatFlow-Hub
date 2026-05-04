@@ -72,14 +72,35 @@ export default function BranchesPage() {
     }
   }
 
+  const onlineOnly = filters.online === true;
+  function toggleOnline() {
+    setFilters((f) => {
+      const next = { ...f };
+      if (next.online === true) delete next.online;
+      else next.online = true;
+      return next;
+    });
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-lg font-semibold">Branches</h1>
-          <p className="text-xs text-muted">{items === null ? "Loading…" : `${items.length} configured`}</p>
+          <p className="text-xs text-muted">{items === null ? "Loading…" : `${items.length} shown`}{onlineOnly ? " · online only" : ""}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <button
+            onClick={toggleOnline}
+            className={
+              "btn text-xs flex items-center gap-1.5 " +
+              (onlineOnly ? "border-success/40 text-success bg-success/10" : "")
+            }
+            title={onlineOnly ? "Showing only enabled branches with collector status = ok" : "Click to hide disabled / errored / never-run branches"}
+          >
+            <span className={"w-1.5 h-1.5 rounded-full " + (onlineOnly ? "bg-success animate-pulse" : "bg-muted")} />
+            {onlineOnly ? "Online only" : "Hide offline"}
+          </button>
           <button onClick={() => setShowImport(true)} className="btn">Import from Site Manager</button>
           <Link href="/branches/new" className="btn btn-primary">+ Add branch</Link>
         </div>
