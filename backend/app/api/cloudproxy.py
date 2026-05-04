@@ -18,6 +18,7 @@ dashboards — admin-only is the right bar.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -74,11 +75,21 @@ class CloudProxyIngestResponse(BaseModel):
 def _stamp(rows: list[dict[str, Any]], branch_id: str, branch_name: str, branch_code: str) -> None:
     """Force the trusted branch identifiers from the DB onto every row,
     so a malicious capture client can't mislabel events into a different
-    branch's bucket."""
+    branch's bucket. Also coerce ISO event_time strings -> tz-aware
+    datetimes so the ClickHouse driver can serialize them."""
     for r in rows:
         r["branch_id"] = branch_id
         r["branch_name"] = branch_name
         r["branch_code"] = branch_code
+        et = r.get("event_time")
+        if isinstance(et, str):
+            try:
+                dt = datetime.fromisoformat(et.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                r["event_time"] = dt
+            except ValueError:
+                r["event_time"] = datetime.now(timezone.utc)
 
 
 @router.post("/cloudproxy", response_model=CloudProxyIngestResponse)
