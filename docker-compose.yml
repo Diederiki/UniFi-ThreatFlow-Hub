@@ -159,6 +159,13 @@ services:
     # Headless Chromium needs ~1GB shared memory minimum to run 50+ tabs
     # without /dev/shm exhaustion.
     shm_size: '2gb'
+    # Force IPv4-only DNS resolution. Without this, Cloudflare TURN's
+    # AAAA records take precedence and Chromium tries to connect to
+    # stun.cloudflare.com / turn.cloudflare.com over IPv6 — which the
+    # docker bridge network doesn't carry — and ICE fails (701 errors).
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
     networks: [threatflow_net]
 
   frontend:
