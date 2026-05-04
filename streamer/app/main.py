@@ -143,6 +143,10 @@ async def _ensure_logged_in(ctx: BrowserContext) -> bool:
 async def _open_tabs(ctx: BrowserContext) -> list[BranchTab]:
     all_branches = await branches_mod.fetch_cloud_branches()
     streamable = branches_mod.filter_streamable(all_branches)
+    if settings.branch_filter:
+        f = settings.branch_filter.lower()
+        streamable = [b for b in streamable if f in b.branch_code.lower()]
+        log.info("branch_filter=%r kept %d branches", settings.branch_filter, len(streamable))
     if len(streamable) > settings.max_tabs:
         log.warning(
             "%d streamable branches but max_tabs=%d; capping",

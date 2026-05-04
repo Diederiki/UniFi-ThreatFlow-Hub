@@ -41,6 +41,10 @@ class Settings:
     # across multiple Chrome processes — see roadmap in README.
     max_tabs = int(_env("STREAMER_MAX_TABS", "60"))
 
+    # Optional substring filter on branch_code; useful for testing or when
+    # we want to focus the streamer on a specific subset.
+    branch_filter = _env("STREAMER_BRANCH_FILTER", "")
+
     # Whether to launch Chrome with a head. We DEFAULT to false because our
     # entrypoint runs Xvfb on :99 — headless mode hits WebRTC ICE host-lookup
     # failures that headed-on-Xvfb sails through. Set to true only if Xvfb

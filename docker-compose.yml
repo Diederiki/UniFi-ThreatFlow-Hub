@@ -154,6 +154,7 @@ services:
       STREAMER_BOOTSTRAP_ONLY:  ${STREAMER_BOOTSTRAP_ONLY:-false}
       STREAMER_DRAIN_SECONDS:   ${STREAMER_DRAIN_SECONDS:-30}
       STREAMER_MAX_TABS:        ${STREAMER_MAX_TABS:-60}
+      STREAMER_BRANCH_FILTER:   ${STREAMER_BRANCH_FILTER:-}
     volumes:
       - streamer_profile:/var/lib/streamer
     # Headless Chromium needs ~1GB shared memory minimum to run 50+ tabs
