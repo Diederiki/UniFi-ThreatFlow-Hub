@@ -190,6 +190,13 @@ async def main_async() -> int:
 
             tabs = await _open_tabs(ctx)
             log.info("supervisor running; %d tab(s) live", len(tabs))
+            # One-shot diagnostic on a single tab so we can confirm the
+            # page actually rendered + the spy is in place. If it isn't,
+            # opening 54 more tabs is just multiplying the same bug.
+            if tabs:
+                await asyncio.sleep(20)
+                diag = await tabs[0].diagnose()
+                log.info("first-tab diagnostic: %s", diag)
             await _supervisor_loop(tabs, stop)
         finally:
             try: await ctx.close()

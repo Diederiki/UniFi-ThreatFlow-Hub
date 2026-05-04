@@ -55,6 +55,27 @@ class BranchTab:
         except Exception as e:
             log.warning("[%s] navigate warning: %s", self.branch.branch_code, e)
 
+    async def diagnose(self) -> dict:
+        """One-time post-navigation diagnostic. Returns observable state
+        about whether the spy is in place + whether the page loaded."""
+        if self.page is None:
+            return {"error": "no page"}
+        try:
+            return await self.page.evaluate(
+                "({"
+                "url: location.href.slice(0,200),"
+                "title: document.title.slice(0,80),"
+                "spy_installed: !!window.__streamer,"
+                "any_count: (window.__streamer&&window.__streamer.any_count)||0,"
+                "buffered: (window.__streamer&&window.__streamer.dc.length)||0,"
+                "rtcpc: typeof RTCPeerConnection,"
+                "ua: navigator.userAgent.slice(0,140),"
+                "webdriver: navigator.webdriver"
+                "})"
+            )
+        except Exception as e:
+            return {"error": str(e)}
+
     async def drain_once(self) -> tuple[int, int]:
         """Pull buffered frames out of the page, decode, map, ingest.
         Returns (flow_rows_inserted, threat_rows_inserted)."""
