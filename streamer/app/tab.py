@@ -57,6 +57,16 @@ class BranchTab:
         cdp = await self.ctx.new_cdp_session(self.page)
         await cdp.send("Page.enable")
         await cdp.send("Page.addScriptToEvaluateOnNewDocument", {"source": SPY_SOURCE})
+        # Two-step navigation: first land on the Site Manager root so the
+        # account/device linking calls run in the normal order. Skipping
+        # straight to /insights/flows leaves the device "unlinked" from the
+        # IoT MQTT topic — AWS replies with `Device not linked` and the
+        # WebRTC offer never gets answered.
+        try:
+            await self.page.goto("https://unifi.ui.com/", wait_until="domcontentloaded", timeout=20_000)
+            await asyncio.sleep(3)
+        except Exception as e:
+            log.warning("[%s] warmup nav: %s", self.branch.branch_code, e)
         url = self.branch.insights_url()
         log.info("[%s] opening %s", self.branch.branch_code, url)
         try:
