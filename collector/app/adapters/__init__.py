@@ -9,6 +9,7 @@ from app.adapters.local_controller import LocalControllerAdapter
 from app.adapters.mock import MockCollector
 from app.adapters.unifi_cloud import UnifiCloudAdapter
 from app.config import settings
+from app.site_cache import SiteManagerCache
 
 __all__ = [
     "BaseUniFiCollector",
@@ -22,7 +23,11 @@ __all__ = [
 ]
 
 
-def select_adapter(branch: dict[str, Any]) -> BaseUniFiCollector:
+def select_adapter(
+    branch: dict[str, Any],
+    *,
+    sites_cache: SiteManagerCache | None = None,
+) -> BaseUniFiCollector:
     """Pick the right adapter for a branch.
 
     Mock mode wins everything when MOCK_DATA=true.
@@ -37,5 +42,5 @@ def select_adapter(branch: dict[str, Any]) -> BaseUniFiCollector:
 
     url = (branch.get("controller_url") or "").lower()
     if "ui.com" in url or "ubnt.com" in url:
-        return UnifiCloudAdapter(branch)
+        return UnifiCloudAdapter(branch, sites_cache=sites_cache)
     return LocalControllerAdapter(branch)

@@ -28,6 +28,7 @@ import httpx
 from app.adapters.base import BaseUniFiCollector, CollectResult
 from app.config import COLLECTOR_VERSION, settings
 from app.encryption import decrypt
+from app.site_cache import SiteManagerCache
 
 log = logging.getLogger("collector.cloud")
 
@@ -35,9 +36,10 @@ SITE_MANAGER_BASE = "https://api.ui.com"
 
 
 class UnifiCloudAdapter(BaseUniFiCollector):
-    def __init__(self, branch: dict[str, Any]) -> None:
+    def __init__(self, branch: dict[str, Any], sites_cache: SiteManagerCache | None = None) -> None:
         super().__init__(branch)
         self._client: httpx.AsyncClient | None = None
+        self._sites_cache = sites_cache
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -54,17 +56,22 @@ class UnifiCloudAdapter(BaseUniFiCollector):
         if not api_key:
             raise RuntimeError("missing API key for cloud branch")
 
-        headers = {"X-API-KEY": api_key, "Accept": "application/json"}
         client = self._get_client()
-        r = await client.get(f"{SITE_MANAGER_BASE}/ea/sites", headers=headers)
-        if r.status_code == 401 or r.status_code == 403:
-            raise RuntimeError(f"api_key_rejected: http_{r.status_code}")
-        if r.status_code != 200:
-            raise RuntimeError(f"http_{r.status_code}: {r.text[:200]}")
-
-        rows = (r.json().get("data") or [])
-        # Find this branch's site by site_id
-        site = next((s for s in rows if isinstance(s, dict) and s.get("siteId") == self.site_id), None)
+        if self._sites_cache is not None:
+            sites_by_id = await self._sites_cache.get(api_key, client)
+            site = sites_by_id.get(self.site_id)
+        else:
+            headers = {"X-API-KEY": api_key, "Accept": "application/json"}
+            r = await client.get(f"{SITE_MANAGER_BASE}/ea/sites", headers=headers)
+            if r.status_code in (401, 403):
+                raise RuntimeError(f"api_key_rejected: http_{r.status_code}")
+            if r.status_code != 200:
+                raise RuntimeError(f"http_{r.status_code}: {r.text[:200]}")
+            rows = r.json().get("data") or []
+            site = next(
+                (s for s in rows if isinstance(s, dict) and s.get("siteId") == self.site_id),
+                None,
+            )
         if site is None:
             raise RuntimeError(f"site_not_found_for_id: {self.site_id}")
 

@@ -23,6 +23,7 @@ from app.batch_writer import writer
 from app.config import COLLECTOR_VERSION, settings
 from app.db import pg
 from app.dedupe import event_hash
+from app.site_cache import SiteManagerCache
 
 log = logging.getLogger("collector.sched")
 
@@ -50,7 +51,11 @@ class Scheduler:
     async def _release_lock(self, branch_id: str) -> None:
         await self._redis.delete(self._lock_key(branch_id))
 
-    async def _process_branch(self, branch: dict[str, Any]) -> None:
+    async def _process_branch(
+        self,
+        branch: dict[str, Any],
+        sites_cache: SiteManagerCache,
+    ) -> None:
         bid = str(branch["id"])
         async with self._sem:
             if not await self._try_lock(bid):
@@ -58,7 +63,7 @@ class Scheduler:
                 return
             run_id = await pg.open_run(branch["id"])
             started = time.perf_counter()
-            adapter = select_adapter(branch)
+            adapter = select_adapter(branch, sites_cache=sites_cache)
             status = "ok"
             err: str | None = None
             event_count = 0
@@ -110,7 +115,11 @@ class Scheduler:
             log.info("tick: no enabled branches")
             return
         log.info("tick: dispatching %d branch(es)", len(branches))
-        await asyncio.gather(*[self._process_branch(b) for b in branches], return_exceptions=False)
+        sites_cache = SiteManagerCache()
+        await asyncio.gather(
+            *[self._process_branch(b, sites_cache) for b in branches],
+            return_exceptions=False,
+        )
 
     async def run_forever(self) -> None:
         await writer.start()
