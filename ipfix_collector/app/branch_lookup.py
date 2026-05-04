@@ -54,9 +54,13 @@ class BranchCache:
                 ) if await self._table_exists(conn, "branch_wan_ips") else []
             finally:
                 await conn.close()
-            self._by_ip = {r["wan_ip"]: dict(r) for r in rows}
+            # asyncpg returns INET as ipaddress.IPv4Address objects; coerce
+            # to string so the dict key matches the str(addr[0]) we get from
+            # the UDP receive loop.
+            self._by_ip = {str(r["wan_ip"]): dict(r) for r in rows}
             self._fetched_at = time.time()
-            log.info("branch lookup refreshed: %d wan-ip mappings", len(self._by_ip))
+            log.info("branch lookup refreshed: %d wan-ip mappings (sample=%s)",
+                     len(self._by_ip), list(self._by_ip.keys())[:3])
 
     async def _table_exists(self, conn: asyncpg.Connection, name: str) -> bool:
         return await conn.fetchval(
