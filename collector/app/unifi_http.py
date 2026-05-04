@@ -30,7 +30,8 @@ def _is_unifi_host(host: str) -> bool:
     return True  # collector clients only ever target UniFi
 
 
-def _read_only_request_hook(request: httpx.Request) -> None:
+async def _read_only_request_hook(request: httpx.Request) -> None:
+    """async — httpx.AsyncClient awaits its event hooks."""
     method = request.method.upper()
     if method in ("GET", "HEAD"):
         return

@@ -58,7 +58,8 @@ def _is_unifi_host(host: str) -> bool:
     return True
 
 
-def _read_only_request_hook(request: httpx.Request) -> None:
+async def _read_only_request_hook(request: httpx.Request) -> None:
+    """Must be async — httpx.AsyncClient awaits its event-hook return values."""
     method = request.method.upper()
     if method in ("GET", "HEAD"):
         return
