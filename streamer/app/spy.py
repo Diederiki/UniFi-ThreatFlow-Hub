@@ -15,7 +15,29 @@ PeerConnection regardless of how it was constructed.
 SPY_SOURCE = r"""
 (() => {
   if (window.__streamer) return;
-  window.__streamer = { dc: [], started_at: Date.now(), last_seen: 0, any_count: 0 };
+  window.__streamer = { dc: [], started_at: Date.now(), last_seen: 0, any_count: 0, ws_opens: [] };
+
+  // Hook WebSocket constructor so we can see whether AWS IoT MQTT WS
+  // is even opening. URL only — payloads we don't need (the data lives
+  // on the WebRTC data channels we hook below).
+  try {
+    const oWS = window.WebSocket;
+    const Wrapped = function(url, protocols) {
+      try {
+        const u = String(url || '');
+        // truncate signed AWS query string so we don't blow up the JSON
+        const trimmed = u.length > 240 ? u.slice(0, 240) + '…' : u;
+        window.__streamer.ws_opens.push({ ts: Date.now(), url: trimmed });
+      } catch(_){}
+      return new oWS(url, protocols);
+    };
+    Wrapped.prototype = oWS.prototype;
+    Wrapped.CONNECTING = oWS.CONNECTING;
+    Wrapped.OPEN = oWS.OPEN;
+    Wrapped.CLOSING = oWS.CLOSING;
+    Wrapped.CLOSED = oWS.CLOSED;
+    window.WebSocket = Wrapped;
+  } catch(e) {}
 
   // Hide common automation tells. Ubiquiti's WebRTC negotiation refuses
   // to connect when navigator.webdriver is true; the rest are belt-and-
