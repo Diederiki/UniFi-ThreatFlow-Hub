@@ -41,9 +41,11 @@ class Settings:
     # across multiple Chrome processes — see roadmap in README.
     max_tabs = int(_env("STREAMER_MAX_TABS", "60"))
 
-    # Whether to launch Chrome with a head (useful for one-time bootstrap
-    # via VNC). Default headless because the service runs unattended.
-    headless = _env("STREAMER_HEADLESS", "true").lower() in ("1", "true", "yes")
+    # Whether to launch Chrome with a head. We DEFAULT to false because our
+    # entrypoint runs Xvfb on :99 — headless mode hits WebRTC ICE host-lookup
+    # failures that headed-on-Xvfb sails through. Set to true only if Xvfb
+    # is unavailable for some reason.
+    headless = _env("STREAMER_HEADLESS", "false").lower() in ("1", "true", "yes")
 
     # Set true for first-run interactive bootstrap: launches non-headless,
     # logs in, persists cookies, exits.
