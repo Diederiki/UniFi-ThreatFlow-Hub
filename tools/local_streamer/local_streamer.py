@@ -264,6 +264,23 @@ async def main_async() -> int:
             await asyncio.sleep(TAB_STAGGER)
 
         log.info("supervisor running; %d tab(s) live", len(tabs))
+        # Quick diagnostic on the first tab so we can see whether the spy
+        # actually installed.
+        if tabs and tabs[0].page is not None:
+            await asyncio.sleep(20)
+            try:
+                diag = await tabs[0].page.evaluate(
+                    "({"
+                    "url: location.href.slice(0,200),"
+                    "title: document.title.slice(0,60),"
+                    "spy_installed: !!window.__streamer,"
+                    "any_count: (window.__streamer&&window.__streamer.any_count)||0,"
+                    "ws_opens_count: (window.__streamer&&window.__streamer.ws_opens.length)||0"
+                    "})"
+                )
+                log.info("first-tab diagnostic: %s", diag)
+            except Exception as e:
+                log.warning("diagnostic failed: %s", e)
         next_drain = time.time() + DRAIN_SECONDS
         next_stats = time.time() + 60
         while True:

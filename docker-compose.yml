@@ -136,6 +136,26 @@ services:
       CH_INSERT_RETRIES: ${CH_INSERT_RETRIES}
     networks: [threatflow_net]
 
+  ipfix_collector:
+    build:
+      context: ./ipfix_collector
+    restart: unless-stopped
+    depends_on:
+      postgres:   { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+    environment:
+      <<: [*common-env, *pg-env, *ch-env]
+      IPFIX_BIND_HOST:  "0.0.0.0"
+      IPFIX_BIND_PORT:  "${IPFIX_BIND_PORT:-2055}"
+      IPFIX_BATCH_SIZE: "${IPFIX_BATCH_SIZE:-500}"
+      IPFIX_FLUSH_INTERVAL_MS: "${IPFIX_FLUSH_INTERVAL_MS:-2000}"
+    ports:
+      # Public UDP listener — UDMs send flow exports straight to this
+      # port. Source-IP filtering is enforced at the host iptables layer
+      # (see infra/scripts/ipfix-firewall.sh) since UDP has no auth.
+      - "0.0.0.0:${IPFIX_BIND_PORT:-2055}:2055/udp"
+    networks: [threatflow_net]
+
   streamer:
     build:
       context: ./streamer
