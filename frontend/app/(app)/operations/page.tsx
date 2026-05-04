@@ -26,9 +26,13 @@ function fmtRel(iso: string | null): string {
   return new Date(iso).toLocaleString();
 }
 
-// 100ms = 10 polls/sec — matches the Live · 100 ms reference. Heavy on the
-// backend if 5+ tabs are open; consider 200-500ms in production if needed.
-const REFRESH_MS = 100;
+// 1Hz is plenty for CPU/mem/disk gauges and fits comfortably under any
+// reasonable per-IP rate limit even with several tabs open. The original
+// 100ms cadence pushed every operator past slowapi's default 60/min within
+// six seconds and rendered the page useless behind a "Too Many Requests"
+// banner. Bring it back to 100-200ms only if a specific monitoring case
+// actually needs sub-second resolution.
+const REFRESH_MS = 1000;
 
 export default function OperationsPage() {
   const toast = useToast();

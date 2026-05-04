@@ -39,5 +39,10 @@ def _trusted_client_ip(request: Request) -> str:
 
 limiter = Limiter(
     key_func=_trusted_client_ip,
-    default_limits=["60/minute"] if settings.is_production else ["1000/minute"],
+    # Generous default for authenticated dashboard traffic. The narrow
+    # brute-force surface (`/api/auth/login`) is decorated separately with
+    # a strict 10/minute limit, so this default doesn't weaken login
+    # protection. 60/minute previously throttled the Operations live page
+    # within seconds of opening it.
+    default_limits=["600/minute"] if settings.is_production else ["6000/minute"],
 )
