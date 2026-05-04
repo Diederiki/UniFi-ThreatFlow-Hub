@@ -136,6 +136,31 @@ services:
       CH_INSERT_RETRIES: ${CH_INSERT_RETRIES}
     networks: [threatflow_net]
 
+  streamer:
+    build:
+      context: ./streamer
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      backend:  { condition: service_healthy }
+    environment:
+      <<: [*common-env, *pg-env]
+      THREATFLOW_API_BASE: http://backend:8000
+      ADMIN_EMAIL:    ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      UI_EMAIL:       ${UI_EMAIL:-}
+      UI_PASSWORD:    ${UI_PASSWORD:-}
+      STREAMER_HEADLESS:        ${STREAMER_HEADLESS:-true}
+      STREAMER_BOOTSTRAP_ONLY:  ${STREAMER_BOOTSTRAP_ONLY:-false}
+      STREAMER_DRAIN_SECONDS:   ${STREAMER_DRAIN_SECONDS:-30}
+      STREAMER_MAX_TABS:        ${STREAMER_MAX_TABS:-60}
+    volumes:
+      - streamer_profile:/var/lib/streamer
+    # Headless Chromium needs ~1GB shared memory minimum to run 50+ tabs
+    # without /dev/shm exhaustion.
+    shm_size: '2gb'
+    networks: [threatflow_net]
+
   frontend:
     build:
       context: ./frontend
@@ -159,6 +184,7 @@ volumes:
   clickhouse_data:
   clickhouse_logs:
   redis_data:
+  streamer_profile:
 
 networks:
   threatflow_net:
